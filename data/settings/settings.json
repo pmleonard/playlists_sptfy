@@ -1,0 +1,13 @@
+{
+    "settings_version": 1,
+    "metadata_enabled": true,
+    "strict_mode": false,
+    "dry_run": false,
+    "log_level": "INFO",
+    "max_ctr": 500,
+    "http_timeout_seconds": 10,
+    "http_max_attempts": 3,
+    "http_retry_backoff_seconds": 1,
+    "http_retry_jitter_seconds": 0
+}
+

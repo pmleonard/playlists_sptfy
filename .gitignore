@@ -1,0 +1,21 @@
+/.idea/
+
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Packaging and test artifacts
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+/data/playlist_export/*.txt
+/data/settings/config.json
+/data/songs_import/*.txt
+/data/song_lists/*.csv
+/data/song_lists/*.json
+/data/song_lists/*.md
