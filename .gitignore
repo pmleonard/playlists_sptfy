@@ -16,6 +16,7 @@ build/
 /data/playlist_export/*.txt
 /data/settings/config.json
 /data/songs_import/*.txt
+!data/songs_import/top_10_all_gens.txt
 /data/song_lists/*.csv
 /data/song_lists/*.json
 /data/song_lists/*.md

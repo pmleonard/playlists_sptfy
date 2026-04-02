@@ -1123,6 +1123,7 @@ def test_main_writes_run_summary_with_stable_schema(monkeypatch) -> None:
         "http_retry_jitter_seconds",
         "metadata_enabled",
         "dry_run",
+        "tags_summary",
     }
     for key in (
         "loaded",
@@ -1147,6 +1148,12 @@ def test_main_writes_run_summary_with_stable_schema(monkeypatch) -> None:
     assert summary["http_retry_jitter_seconds"] == 0
     assert isinstance(summary["metadata_enabled"], bool)
     assert isinstance(summary["dry_run"], bool)
+    tags_summary = summary.get("tags_summary")
+    assert isinstance(tags_summary, dict)
+    assert set(tags_summary.keys()) == {"total_tag_assignments", "unique_tags", "tag_counts"}
+    assert isinstance(tags_summary["total_tag_assignments"], int)
+    assert isinstance(tags_summary["unique_tags"], int)
+    assert isinstance(tags_summary["tag_counts"], list)
 
 
 def test_load_settings_backfills_http_settings_from_defaults(tmp_path: Path, monkeypatch) -> None:
