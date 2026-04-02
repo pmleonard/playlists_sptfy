@@ -1,11 +1,18 @@
 import json
 import logging
 import random
+import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
+
+# Support `python src/playlists_sptfy/main.py` by bootstrapping package context.
+if globals().get("__package__") in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    globals()["__package__"] = "playlists_sptfy"
 
 from .config import load_settings as load_settings_from_paths
 from .exporters import (
@@ -144,6 +151,7 @@ def main():
         "http_retry_jitter_seconds": int(_HTTP_CONFIG["retry_jitter_seconds"]),
         "metadata_enabled": metadata_enabled,
         "dry_run": dry_run,
+        "tags_summary": build_tags_summary(songs),
     }
 
     if dry_run:
@@ -175,26 +183,77 @@ def main():
         write_song_links_txt(filtered_songs, playlist_export_path)
         write_json_file(run_summary, run_summary_path)
 
-    logger.info(
-        (
-            "Run summary: loaded=%d imported=%d deduped=%d "
-            "filtered=%d grouped=%d duplicate_groups=%d invalid=%d retries=%d failed_urls=%d "
-            "http_errors=%d metadata_enabled=%s strict_mode=%s dry_run=%s"
-        ),
-        loaded_song_count,
-        imported_song_count,
-        deduped_song_count,
-        filtered_song_count,
-        grouped_filtered_song_count,
-        len(possible_duplicates),
-        invalid_song_count,
-        _RETRY_METRICS["retries"],
-        _RETRY_METRICS["failed_urls"],
-        _RETRY_METRICS["http_errors"],
-        metadata_enabled,
-        strict_mode,
-        dry_run,
-    )
+    log_run_summary(run_summary, strict_mode)
+
+
+def log_run_summary(run_summary: dict, strict_mode: bool) -> None:
+    # Keep stable order so logs remain easy to scan across runs.
+    config_keys = [
+        "http_timeout_seconds",
+        "http_max_attempts",
+        "http_retry_backoff_seconds",
+        "http_retry_jitter_seconds",
+        "metadata_enabled",
+        "dry_run",
+    ]
+    run_stats_keys = [
+        "loaded",
+        "imported",
+        "deduped",
+        "filtered",
+        "grouped",
+        "duplicate_groups",
+        "invalid",
+        "retries",
+        "failed_urls",
+        "http_errors",
+    ]
+
+    lines = ["Run summary:", "Configuration:"]
+    for key in config_keys:
+        lines.append(f"- {key}: {run_summary.get(key)}")
+    lines.append(f"- strict_mode: {strict_mode}")
+    lines.append("Run stats:")
+    run_stats_items = [f"{key}: {run_summary.get(key)}" for key in run_stats_keys]
+    columns = 4
+    for start in range(0, len(run_stats_items), columns):
+        row_items = run_stats_items[start : start + columns]
+        lines.append("- " + "   |   ".join(row_items))
+
+    tags_summary = run_summary.get("tags_summary", {})
+    lines.append("Tags summary:")
+    lines.append(f"- total_tag_assignments: {tags_summary.get('total_tag_assignments', 0)}")
+    lines.append(f"- unique_tags: {tags_summary.get('unique_tags', 0)}")
+    tag_counts = tags_summary.get("tag_counts", [])
+    if tag_counts:
+        lines.append("- tag_counts:")
+        tag_count_items = [f"{item['tag']}({item['count']})" for item in tag_counts]
+        columns = 5
+        for start in range(0, len(tag_count_items), columns):
+            row_items = tag_count_items[start : start + columns]
+            lines.append("  " + "   |   ".join(row_items))
+    else:
+        lines.append("- tag_counts: none")
+    logger.info("\n%s", "\n".join(lines))
+
+
+def build_tags_summary(songs: list[dict]) -> dict:
+    counts: Counter[str] = Counter()
+    for song in songs:
+        normalized = normalize_tags(song.get("tags", ""))
+        if not normalized:
+            continue
+        for tag in normalized.split(", "):
+            counts[tag] += 1
+
+    # Sort by descending count then tag name for stable output.
+    sorted_tag_counts = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    tag_counts = [{"tag": tag, "count": count} for tag, count in sorted_tag_counts]
+    return {
+        "total_tag_assignments": int(sum(counts.values())),
+        "unique_tags": int(len(counts)),
+        "tag_counts": tag_counts,
+    }
 
 
 def validate_song_rows(songs: list[dict], strict_mode: bool = False) -> tuple[list[dict], int]:
