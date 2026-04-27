@@ -17,6 +17,7 @@ _REQUIRED_CONFIG_KEYS = {
     "song_list_path": str,
     "duplicates_path": str,
     "duplicates_report_path": str,
+    "ignore_duplicates_path": str,
     "songs_csv_path": str,
     "playlist_export_path": str,
     "grouped_songs_path": str,

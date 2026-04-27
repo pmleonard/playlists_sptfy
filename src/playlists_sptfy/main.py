@@ -98,6 +98,9 @@ def main():
     songs_csv_path = PROJECT_ROOT / settings["songs_csv_path"]
     playlist_export_path = PROJECT_ROOT / settings["playlist_export_path"]
     grouped_songs_path = PROJECT_ROOT / settings["grouped_songs_path"]
+    ignore_duplicates_path = PROJECT_ROOT / settings.get(
+        "ignore_duplicates_path", "data/song_lists/ignore_duplicates.json"
+    )
     run_summary_path = PROJECT_ROOT / settings["run_summary_path"]
     metadata_enabled = settings["metadata_enabled"]
     strict_mode = settings["strict_mode"]
@@ -124,7 +127,7 @@ def main():
     if invalid_song_count:
         logger.warning("Dropped %d invalid songs during validation", invalid_song_count)
 
-    possible_duplicates = find_duplicates(songs, 25)
+    possible_duplicates = find_duplicates(songs, 25, ignore_duplicates_path)
     filtered_songs = tag_filter_songs(songs, tags_filter)
     filtered_song_count = len(filtered_songs)
 
@@ -347,18 +350,71 @@ def remove_duplicates(songs):
     return list(songs_obj.values())
 
 
-def find_duplicates(songs, num_chars):
+def _load_ignored_duplicate_links(
+    ignore_duplicates_path: Path | None, num_chars: int
+) -> dict[str, set[str]]:
+    if ignore_duplicates_path is None or not ignore_duplicates_path.exists():
+        return {}
+
+    try:
+        with open(ignore_duplicates_path, encoding="utf-8") as file:
+            ignored = json.load(file)
+    except json.JSONDecodeError:
+        logger.warning(
+            "Invalid ignore duplicates JSON at %s; skipping ignore list.", ignore_duplicates_path
+        )
+        return {}
+
+    if not isinstance(ignored, dict):
+        logger.warning(
+            "Ignore duplicates JSON must be an object at %s; skipping ignore list.",
+            ignore_duplicates_path,
+        )
+        return {}
+
+    ignored_links_by_short: dict[str, set[str]] = {}
+    for title_key, entries in ignored.items():
+        if not isinstance(entries, list):
+            continue
+        short_key = str(title_key)[:num_chars]
+        links = ignored_links_by_short.setdefault(short_key, set())
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            link = str(entry.get("link", "")).strip()
+            if link:
+                links.add(link)
+    return ignored_links_by_short
+
+
+def find_duplicates(songs, num_chars, ignore_duplicates_path: Path | None = None):
     summary = {}
     dups = {}
+    ignored_links_by_short = _load_ignored_duplicate_links(ignore_duplicates_path, num_chars)
+
     for song in songs:
         ttl = song["title"]
         if not isinstance(ttl, str):
             ttl = str(ttl)
         short = ttl[:num_chars]
         summary.setdefault(short, []).append(song)
-    for short, entries in summary.items():
-        if len(entries) > 1:
-            dups[short] = entries
+
+    for short in sorted(summary):
+        entries = summary[short]
+        ignored_links = ignored_links_by_short.get(short, set())
+        filtered_entries = [song for song in entries if song.get("link") not in ignored_links]
+        if len(filtered_entries) <= 1:
+            continue
+        dups[short] = sorted(
+            filtered_entries,
+            key=lambda song: (
+                str(song.get("artist", "")).lower(),
+                str(song.get("title", "")).lower(),
+                str(song.get("album", "")).lower(),
+                str(song.get("link", "")),
+            ),
+        )
+
     return dups
 
 
