@@ -13,6 +13,7 @@ JSON files are organized by purpose:
 - `songs.template.json`: starter template to copy into `songs.json`
 - `songs.csv`: CSV export of the canonical song list
 - `run_summary.json`: run metrics summary for the latest execution, including effective HTTP timeout/retry settings
+- `ignore_duplicates.json`: known duplicate groups to suppress in duplicate outputs
 - `possible_duplicates.json`: duplicate groups keyed by title prefix
 - `possible_duplicates.md`: markdown summary of duplicates
 
@@ -51,6 +52,7 @@ Tag filters match explicit normalized tags, so seasonal variants like `xmasa`, `
 - `song_list_path`
 - `duplicates_path`
 - `duplicates_report_path`
+- `ignore_duplicates_path`
 - `songs_csv_path`
 - `run_summary_path`
 - `playlist_export_path`

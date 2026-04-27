@@ -2,6 +2,7 @@
     "song_list_path": "data/song_lists/songs.json",
     "duplicates_path": "data/song_lists/duplicates.json",
     "duplicates_report_path": "data/song_lists/duplicates.md",
+    "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
     "songs_csv_path": "data/song_lists/songs.csv",
     "run_summary_path": "data/song_lists/run_summary.json",
     "playlist_export_path": "data/playlist_export/songs.txt",

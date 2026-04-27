@@ -18,6 +18,11 @@ bootstrap:
 		cp data/song_lists/songs.template.json data/song_lists/songs.json; \
 		echo "Created data/song_lists/songs.json from songs.template.json"; \
 	fi
+	@if [ ! -f data/song_lists/ignore_duplicates.json ]; then \
+		mkdir -p data/song_lists; \
+		echo "{}" > data/song_lists/ignore_duplicates.json; \
+		echo "Created data/song_lists/ignore_duplicates.json"; \
+	fi
 
 bootstrap-force:
 	@if [ -f data/settings/default_settings.json ]; then \
@@ -32,6 +37,9 @@ bootstrap-force:
 		cp data/song_lists/songs.template.json data/song_lists/songs.json; \
 		echo "Overwrote data/song_lists/songs.json from songs.template.json"; \
 	fi
+	@mkdir -p data/song_lists
+	@echo "{}" > data/song_lists/ignore_duplicates.json
+	@echo "Reset data/song_lists/ignore_duplicates.json"
 
 setup-dev:
 	python -m pip install -e .

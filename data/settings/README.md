@@ -31,6 +31,7 @@ This directory contains:
     "song_list_path": "data/song_lists/songs.json",
     "duplicates_path": "data/song_lists/duplicates.json",
     "duplicates_report_path": "data/song_lists/duplicates.md",
+    "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
     "songs_csv_path": "data/song_lists/songs.csv",
     "run_summary_path": "data/song_lists/run_summary.json",
     "playlist_export_path": "data/playlist_export/songs.txt",
@@ -56,6 +57,9 @@ All paths are relative to the project root.
 
 - **`duplicates_report_path`**: Output path for human-readable duplicate report
   - Markdown format with artist, title, and album columns
+
+- **`ignore_duplicates_path`**: Input path for known duplicate groups to skip
+  - Songs linked in this JSON file are excluded from duplicate output groups
 
 - **`songs_csv_path`**: Output path for CSV export of song list
   - Contains all song fields: link, artist, title, released, duration, album, track, tags

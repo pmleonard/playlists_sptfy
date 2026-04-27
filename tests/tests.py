@@ -111,6 +111,45 @@ def test_find_duplicates_detects_similar_titles() -> None:
     assert "Unique Title" not in dups
 
 
+def test_find_duplicates_ignores_entries_listed_in_ignore_file(tmp_path: Path) -> None:
+    songs = [
+        _song("url1", "Artist A", "Same Song Title", "pop"),
+        _song("url2", "Artist B", "Same Song Title", "rock"),
+        _song("url3", "Artist C", "Same Song Title", "jazz"),
+    ]
+    ignore_path = tmp_path / "ignore_duplicates.json"
+    ignore_path.write_text(
+        json.dumps(
+            {
+                "Same Song Title": [
+                    {"link": "url1"},
+                    {"link": "url2"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    dups = find_duplicates(songs, 25, ignore_path)
+
+    assert "Same Song Title" not in dups
+
+
+def test_find_duplicates_returns_sorted_groups_and_entries() -> None:
+    songs = [
+        _song("url-z", "B Artist", "Beta", "tag"),
+        _song("url-a", "A Artist", "Beta", "tag"),
+        _song("url-y", "C Artist", "Alpha", "tag"),
+        _song("url-b", "A Artist", "Alpha", "tag"),
+    ]
+
+    dups = find_duplicates(songs, 25)
+
+    assert list(dups.keys()) == ["Alpha", "Beta"]
+    assert [song["link"] for song in dups["Alpha"]] == ["url-b", "url-y"]
+    assert [song["link"] for song in dups["Beta"]] == ["url-a", "url-z"]
+
+
 def test_remove_duplicates_merges_tags() -> None:
     songs = [
         _song("url1", "Artist", "Title", "Pop, rock"),
@@ -354,6 +393,7 @@ def test_load_settings_bootstraps_from_default_when_missing(tmp_path: Path, monk
         "run_summary_path": "data/song_lists/run_summary.json",
         "playlist_export_path": "data/playlist_export/songs.txt",
         "grouped_songs_path": "data/song_lists/grouped_songs.json",
+        "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
         "tags_filter": {"include": [], "exclude": []},
     }
     default_settings_path.write_text(json.dumps(default_settings), encoding="utf-8")
@@ -404,6 +444,7 @@ def test_load_settings_raises_for_invalid_json(tmp_path: Path, monkeypatch) -> N
                 "run_summary_path": "data/song_lists/run_summary.json",
                 "playlist_export_path": "data/playlist_export/songs.txt",
                 "grouped_songs_path": "data/song_lists/grouped_songs.json",
+                "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
                 "tags_filter": {"include": [], "exclude": []},
             }
         ),
@@ -446,6 +487,7 @@ def test_load_settings_raises_for_invalid_dry_run_type(tmp_path: Path, monkeypat
                 "run_summary_path": "data/song_lists/run_summary.json",
                 "playlist_export_path": "data/playlist_export/songs.txt",
                 "grouped_songs_path": "data/song_lists/grouped_songs.json",
+                "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
                 "tags_filter": {"include": [], "exclude": []},
             }
         ),
@@ -488,6 +530,7 @@ def test_load_settings_raises_for_unsupported_settings_version(tmp_path: Path, m
                 "run_summary_path": "data/song_lists/run_summary.json",
                 "playlist_export_path": "data/playlist_export/songs.txt",
                 "grouped_songs_path": "data/song_lists/grouped_songs.json",
+                "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
                 "tags_filter": {"include": [], "exclude": []},
             }
         ),
@@ -522,6 +565,7 @@ def test_main_orchestration_uses_filtered_grouped_songs_for_playlist_export(monk
             "run_summary_path": "data/song_lists/run_summary.json",
             "playlist_export_path": "data/playlist_export/playlist.txt",
             "grouped_songs_path": "data/song_lists/grouped_songs.json",
+            "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
             "metadata_enabled": True,
             "strict_mode": False,
             "dry_run": False,
@@ -561,6 +605,52 @@ def test_main_orchestration_uses_filtered_grouped_songs_for_playlist_export(monk
     assert captured["csv"] == ["url-a", "url-b", "url-c"]
     assert captured["playlist"] == ["url-b", "url-a"]
     assert isinstance(captured["dups"], dict)
+
+
+def test_main_uses_configured_ignore_duplicates_path(monkeypatch) -> None:
+    songs = [_song("url-a", "Artist", "Same Song", "featured")]
+    captured: dict[str, Any] = {"path": None}
+
+    monkeypatch.setattr(
+        main_module,
+        "load_settings",
+        lambda: {
+            "song_list_path": "data/song_lists/songs.json",
+            "duplicates_path": "data/song_lists/possible_duplicates.json",
+            "duplicates_report_path": "data/song_lists/possible_duplicates.md",
+            "songs_csv_path": "data/song_lists/songs.csv",
+            "run_summary_path": "data/song_lists/run_summary.json",
+            "playlist_export_path": "data/playlist_export/playlist.txt",
+            "grouped_songs_path": "data/song_lists/grouped_songs.json",
+            "ignore_duplicates_path": "data/song_lists/custom_ignore_duplicates.json",
+            "metadata_enabled": False,
+            "strict_mode": False,
+            "dry_run": False,
+            "log_level": "INFO",
+            "tags_filter": {"include": [], "exclude": []},
+            "max_ctr": 0,
+        },
+    )
+    monkeypatch.setattr(main_module, "open_json_file", lambda _path: [dict(song) for song in songs])
+    monkeypatch.setattr(main_module, "load_songs_from_tag_files", lambda _path: [])
+    monkeypatch.setattr(main_module, "load_grouped_songs", lambda _path: [])
+    monkeypatch.setattr(main_module.random, "shuffle", lambda _songs: None)
+    monkeypatch.setattr(main_module, "write_songs_csv", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "write_duplicates_markdown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "write_song_links_txt", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "write_json_file", lambda *_args, **_kwargs: None)
+
+    def _capture_find_duplicates(in_songs, _num_chars, ignore_path):
+        captured["path"] = str(ignore_path)
+        return {}
+
+    monkeypatch.setattr(main_module, "find_duplicates", _capture_find_duplicates)
+
+    main_module.main()
+
+    assert captured["path"] == str(
+        main_module.PROJECT_ROOT / "data/song_lists/custom_ignore_duplicates.json"
+    )
 
 
 def test_get_url_meta_passes_timeout_to_requests(monkeypatch) -> None:
@@ -688,6 +778,7 @@ def test_main_integration_writes_outputs_with_fixture(tmp_path: Path, monkeypatc
                 "run_summary_path": "data/song_lists/run_summary.json",
                 "playlist_export_path": "data/playlist_export/playlist.txt",
                 "grouped_songs_path": "data/song_lists/grouped_songs.json",
+                "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
                 "tags_filter": {"include": [], "exclude": []},
             }
         ),
@@ -760,6 +851,7 @@ def test_main_creates_missing_song_and_grouped_list_files(tmp_path: Path, monkey
                 "run_summary_path": "data/song_lists/run_summary.json",
                 "playlist_export_path": "data/playlist_export/playlist.txt",
                 "grouped_songs_path": "data/song_lists/grouped_songs.json",
+                "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
                 "tags_filter": {"include": [], "exclude": []},
             }
         ),
@@ -857,6 +949,7 @@ def test_main_golden_snapshot_tiny_fixture_outputs_exact_artifacts(
                 "run_summary_path": "data/song_lists/run_summary.json",
                 "playlist_export_path": "data/playlist_export/playlist.txt",
                 "grouped_songs_path": "data/song_lists/grouped_songs.json",
+                "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
                 "tags_filter": {"include": ["featured"], "exclude": []},
             }
         ),
@@ -928,6 +1021,7 @@ def test_main_dry_run_skips_all_writes(monkeypatch, caplog) -> None:
             "run_summary_path": "data/song_lists/run_summary.json",
             "playlist_export_path": "data/playlist_export/playlist.txt",
             "grouped_songs_path": "data/song_lists/grouped_songs.json",
+            "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
             "metadata_enabled": False,
             "strict_mode": False,
             "dry_run": True,
@@ -984,6 +1078,7 @@ def test_load_settings_migrates_legacy_missing_version(tmp_path: Path, monkeypat
         "max_ctr": 100,
     }
     default_settings = {
+        "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
         "settings_version": 1,
         "metadata_enabled": True,
         "strict_mode": False,
@@ -999,6 +1094,7 @@ def test_load_settings_migrates_legacy_missing_version(tmp_path: Path, monkeypat
         "run_summary_path": "data/song_lists/run_summary.json",
         "playlist_export_path": "data/playlist_export/songs.txt",
         "grouped_songs_path": "data/song_lists/grouped_songs.json",
+        "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
         "tags_filter": {"include": [], "exclude": []},
     }
     settings_path.write_text(json.dumps(legacy_settings), encoding="utf-8")
@@ -1033,6 +1129,7 @@ def test_main_resets_runtime_state_between_runs(monkeypatch) -> None:
             "run_summary_path": "data/song_lists/run_summary.json",
             "playlist_export_path": "data/playlist_export/playlist.txt",
             "grouped_songs_path": "data/song_lists/grouped_songs.json",
+            "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
             "metadata_enabled": False,
             "strict_mode": False,
             "dry_run": True,
@@ -1075,6 +1172,7 @@ def test_main_writes_run_summary_with_stable_schema(monkeypatch) -> None:
             "run_summary_path": "data/song_lists/run_summary.json",
             "playlist_export_path": "data/playlist_export/playlist.txt",
             "grouped_songs_path": "data/song_lists/grouped_songs.json",
+            "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
             "metadata_enabled": False,
             "strict_mode": False,
             "dry_run": False,
@@ -1184,6 +1282,7 @@ def test_load_settings_backfills_http_settings_from_defaults(tmp_path: Path, mon
                 "dry_run": False,
                 "log_level": "INFO",
                 "max_ctr": 500,
+                "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
                 "http_timeout_seconds": 11,
                 "http_max_attempts": 4,
                 "http_retry_backoff_seconds": 2,
@@ -1202,6 +1301,7 @@ def test_load_settings_backfills_http_settings_from_defaults(tmp_path: Path, mon
                 "run_summary_path": "data/song_lists/run_summary.json",
                 "playlist_export_path": "data/playlist_export/songs.txt",
                 "grouped_songs_path": "data/song_lists/grouped_songs.json",
+                "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
                 "tags_filter": {"include": [], "exclude": []},
             }
         ),
@@ -1251,6 +1351,7 @@ def test_load_settings_raises_for_invalid_http_max_attempts_value(
                 "run_summary_path": "data/song_lists/run_summary.json",
                 "playlist_export_path": "data/playlist_export/songs.txt",
                 "grouped_songs_path": "data/song_lists/grouped_songs.json",
+                "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
                 "tags_filter": {"include": [], "exclude": []},
             }
         ),

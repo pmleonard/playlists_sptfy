@@ -68,6 +68,7 @@ make precommit
 - `song_list_path`: input/output song list JSON path
 - `duplicates_path`: duplicate groups JSON output path
 - `duplicates_report_path`: duplicate groups markdown output path
+- `ignore_duplicates_path`: duplicate groups JSON input used to suppress known/accepted duplicates
 - `songs_csv_path`: songs CSV output path
 - `run_summary_path`: run summary JSON output path
   - Includes per-run counts, retry metrics, and effective HTTP timeout/retry settings
@@ -106,6 +107,7 @@ make bootstrap
 This creates `data/settings/settings.json` from `data/settings/default_settings.json`,
 `data/settings/config.json` from `data/settings/default_config.json`, and
 `data/song_lists/songs.json` from `data/song_lists/songs.template.json` when they are missing.
+It also creates `data/song_lists/ignore_duplicates.json` as `{}` when missing.
 
 To force-refresh both files from defaults/templates (overwriting local changes):
 
@@ -190,6 +192,7 @@ playlists_sptfy/
 |   |   `-- settings.json
 |   |-- song_lists/
 |   |   |-- grouped_songs.json
+|   |   |-- ignore_duplicates.json
 |   |   |-- run_summary.json
 |   |   |-- songs.csv
 |   |   |-- songs.json
