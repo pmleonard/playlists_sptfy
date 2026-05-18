@@ -46,7 +46,8 @@ make precommit
    - `duplicates_path`
    - `duplicates_report_path`
    - `playlist_export_path`
-8. Applies optional tag filtering to playlist text export
+   - `playlist_exports[*].filename`
+8. Applies per-export tag filtering to each playlist text export
 
 ## Settings
 
@@ -72,22 +73,40 @@ make precommit
 - `songs_csv_path`: songs CSV output path
 - `run_summary_path`: run summary JSON output path
   - Includes per-run counts, retry metrics, and effective HTTP timeout/retry settings
-- `playlist_export_path`: plain-text song link export path
+- `playlist_export_path`: directory where playlist text exports are written
 - `grouped_songs_path`: grouped song definitions used to keep grouped songs adjacent after randomization
-- `tags_filter`: include/exclude tag filter for playlist text export
+- `playlist_exports`: list of playlist export definitions
+  - `filename`: output file name written inside `playlist_export_path`
+  - `random` (optional): when `false`, keep filtered song order instead of shuffling before grouping
+  - `tags_filter`: include/exclude tag filter for that playlist export
 
-Example filter:
+Example playlist exports:
 
 ```json
 {
-  "tags_filter": {
-    "include": ["preferred"],
-    "exclude": ["skip", "skipa", "skipb"]
-  }
+  "playlist_export_path": "data/playlist_export",
+  "playlist_exports": [
+    {
+      "filename": "preferred.txt",
+      "random": false,
+      "tags_filter": {
+        "include": ["preferred"],
+        "exclude": ["skip", "skipa", "skipb"]
+      }
+    },
+    {
+      "filename": "all.txt",
+      "tags_filter": {
+        "include": [],
+        "exclude": []
+      }
+    }
+  ]
 }
 ```
 
-This keeps songs tagged `preferred`, but removes any song that also has one of the excluded tags.
+Each export writes one text file inside `playlist_export_path`.
+If `random` is omitted, the export is shuffled by default.
 Tag matching is exact after normalization, so if you need to exclude tag variants, list each one explicitly.
 
 Note: `songs_csv_path` remains the canonical unfiltered catalog export.
@@ -140,7 +159,7 @@ https://open.spotify.com/track/def456
 https://open.spotify.com/track/ghi789
 ```
 
-The playlist export text file uses this same one-link-per-line format.
+Each playlist export text file uses this same one-link-per-line format.
 
 ## Troubleshooting
 
@@ -153,7 +172,7 @@ The playlist export text file uses this same one-link-per-line format.
 python -m playlists_sptfy
 ```
 
-- If playlist output is unexpectedly empty, check `tags_filter` in `data/settings/config.json`.
+- If playlist output is unexpectedly empty, check the relevant `playlist_exports[*].tags_filter` entry in `data/settings/config.json`.
 - To validate `settings.json` and `config.json` without running the pipeline:
 
 ```bash

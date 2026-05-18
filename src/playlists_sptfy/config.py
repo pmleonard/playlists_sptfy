@@ -22,7 +22,7 @@ _REQUIRED_CONFIG_KEYS = {
     "playlist_export_path": str,
     "grouped_songs_path": str,
     "run_summary_path": str,
-    "tags_filter": dict,
+    "playlist_exports": list,
 }
 
 _LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}
@@ -94,6 +94,20 @@ def migrate_config(config: dict, defaults: dict | None = None) -> tuple[dict, bo
     migrated = dict(config)
     changed = False
     defaults = defaults or {}
+
+    legacy_tags_filter = migrated.get("tags_filter")
+    legacy_playlist_export_path = migrated.get("playlist_export_path")
+
+    if "playlist_exports" not in migrated and legacy_tags_filter is not None:
+        playlist_path = Path(str(legacy_playlist_export_path or "data/playlist_export/songs.txt"))
+        filename = playlist_path.name if playlist_path.suffix else "songs.txt"
+        if playlist_path.suffix:
+            migrated["playlist_export_path"] = playlist_path.parent.as_posix()
+        else:
+            migrated["playlist_export_path"] = playlist_path.as_posix()
+        migrated["playlist_exports"] = [{"filename": filename, "tags_filter": legacy_tags_filter}]
+        migrated.pop("tags_filter", None)
+        changed = True
 
     for key in _REQUIRED_CONFIG_KEYS:
         if key not in migrated and key in defaults:
@@ -167,13 +181,29 @@ def validate_config(config: dict) -> dict:
         if not isinstance(config[key], expected_type):
             raise ValueError(f"Invalid setting type for {key}: expected {expected_type.__name__}")
 
-    tags_filter = config["tags_filter"]
-    for key in ("include", "exclude"):
-        if key not in tags_filter:
-            raise ValueError(f"Missing required tags_filter key: {key}")
-        values = tags_filter[key]
-        if not isinstance(values, (list, str)):
-            raise ValueError(f"Invalid tags_filter.{key}: expected list or string")
+    playlist_exports = config["playlist_exports"]
+    for i, export_cfg in enumerate(playlist_exports):
+        if not isinstance(export_cfg, dict):
+            raise ValueError(f"Invalid playlist_exports[{i}]: expected object")
+        if "filename" not in export_cfg:
+            raise ValueError(f"Missing required playlist_exports[{i}].filename")
+        if not isinstance(export_cfg["filename"], str):
+            raise ValueError(f"Invalid playlist_exports[{i}].filename: expected string")
+        if "tags_filter" not in export_cfg:
+            raise ValueError(f"Missing required playlist_exports[{i}].tags_filter")
+        if "random" in export_cfg and not isinstance(export_cfg["random"], bool):
+            raise ValueError(f"Invalid playlist_exports[{i}].random: expected bool")
+        tags_filter = export_cfg["tags_filter"]
+        if not isinstance(tags_filter, dict):
+            raise ValueError(f"Invalid playlist_exports[{i}].tags_filter: expected object")
+        for key in ("include", "exclude"):
+            if key not in tags_filter:
+                raise ValueError(f"Missing required playlist_exports[{i}].tags_filter.{key}")
+            values = tags_filter[key]
+            if not isinstance(values, (list, str)):
+                raise ValueError(
+                    f"Invalid playlist_exports[{i}].tags_filter.{key}: expected list or string"
+                )
 
     return config
 

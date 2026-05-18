@@ -57,5 +57,5 @@ Tag filters match explicit normalized tags, so seasonal variants like `xmasa`, `
 - `run_summary_path`
 - `playlist_export_path`
 - `grouped_songs_path`
-- `tags_filter`
+- `playlist_exports`
 
