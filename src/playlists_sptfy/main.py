@@ -96,7 +96,7 @@ def main():
     duplicates_path = PROJECT_ROOT / settings["duplicates_path"]
     duplicates_report_path = PROJECT_ROOT / settings["duplicates_report_path"]
     songs_csv_path = PROJECT_ROOT / settings["songs_csv_path"]
-    playlist_export_path = PROJECT_ROOT / settings["playlist_export_path"]
+    playlist_export_dir = PROJECT_ROOT / settings["playlist_export_path"]
     grouped_songs_path = PROJECT_ROOT / settings["grouped_songs_path"]
     ignore_duplicates_path = PROJECT_ROOT / settings.get(
         "ignore_duplicates_path", "data/song_lists/ignore_duplicates.json"
@@ -105,7 +105,7 @@ def main():
     metadata_enabled = settings["metadata_enabled"]
     strict_mode = settings["strict_mode"]
     dry_run = settings["dry_run"]
-    tags_filter = settings["tags_filter"]
+    playlist_exports = settings["playlist_exports"]
     max_ctr = int(settings["max_ctr"])
 
     ensure_json_list_file(song_list_path)
@@ -128,21 +128,40 @@ def main():
         logger.warning("Dropped %d invalid songs during validation", invalid_song_count)
 
     possible_duplicates = find_duplicates(songs, 25, ignore_duplicates_path)
-    filtered_songs = tag_filter_songs(songs, tags_filter)
-    filtered_song_count = len(filtered_songs)
 
-    # Playlist export is randomized, then re-grouped to keep linked tracks adjacent.
-    random.shuffle(filtered_songs)
+    # Build each playlist export: filter, shuffle, re-group to keep linked tracks adjacent.
     grouped_songs = load_grouped_songs(grouped_songs_path)
-    filtered_songs = group_randomized_songs(filtered_songs, grouped_songs)
-    grouped_filtered_song_count = len(filtered_songs)
+    export_results = []
+    for export_cfg in playlist_exports:
+        filename = export_cfg["filename"]
+        export_filter = export_cfg["tags_filter"]
+        export_random = export_cfg.get("random", True)
+        export_songs = tag_filter_songs(songs, export_filter)
+        filtered_count = len(export_songs)
+        if export_random:
+            random.shuffle(export_songs)
+        export_songs = group_randomized_songs(export_songs, grouped_songs)
+        grouped_count = len(export_songs)
+        export_results.append(
+            {
+                "filename": filename,
+                "random": export_random,
+                "songs": export_songs,
+                "filtered_count": filtered_count,
+                "grouped_count": grouped_count,
+                "path": playlist_export_dir / filename,
+            }
+        )
+
+    total_filtered = sum(r["filtered_count"] for r in export_results)
+    total_grouped = sum(r["grouped_count"] for r in export_results)
 
     run_summary = {
         "loaded": loaded_song_count,
         "imported": imported_song_count,
         "deduped": deduped_song_count,
-        "filtered": filtered_song_count,
-        "grouped": grouped_filtered_song_count,
+        "filtered": total_filtered,
+        "grouped": total_grouped,
         "duplicate_groups": len(possible_duplicates),
         "invalid": invalid_song_count,
         "retries": _RETRY_METRICS["retries"],
@@ -171,11 +190,12 @@ def main():
             len(possible_duplicates),
             duplicates_report_path,
         )
-        logger.info(
-            "Would write %d playlist links to %s",
-            len(filtered_songs),
-            playlist_export_path,
-        )
+        for result in export_results:
+            logger.info(
+                "Would write %d playlist links to %s",
+                result["grouped_count"],
+                result["path"],
+            )
         logger.info("Would write run summary JSON to %s", run_summary_path)
     else:
         write_json_file(songs, song_list_path)
@@ -183,7 +203,8 @@ def main():
         write_songs_csv(songs, songs_csv_path)
         write_json_file(possible_duplicates, duplicates_path)
         write_duplicates_markdown(possible_duplicates, duplicates_report_path)
-        write_song_links_txt(filtered_songs, playlist_export_path)
+        for result in export_results:
+            write_song_links_txt(result["songs"], result["path"])
         write_json_file(run_summary, run_summary_path)
 
     log_run_summary(run_summary, strict_mode)

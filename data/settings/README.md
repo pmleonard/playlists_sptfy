@@ -34,12 +34,18 @@ This directory contains:
     "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
     "songs_csv_path": "data/song_lists/songs.csv",
     "run_summary_path": "data/song_lists/run_summary.json",
-    "playlist_export_path": "data/playlist_export/songs.txt",
+    "playlist_export_path": "data/playlist_export",
     "grouped_songs_path": "data/song_lists/grouped_songs.json",
-    "tags_filter": {
-        "include": [],
-        "exclude": []
-    }
+    "playlist_exports": [
+        {
+            "filename": "songs.txt",
+            "random": true,
+            "tags_filter": {
+                "include": [],
+                "exclude": []
+            }
+        }
+    ]
 }
 ```
 
@@ -67,15 +73,17 @@ All paths are relative to the project root.
 - **`run_summary_path`**: Output path for run metrics summary JSON
   - Contains counts for loaded/imported/deduped/filtered/grouped songs, retry metrics, and effective HTTP settings
 
-- **`playlist_export_path`**: Output path for randomized playlist links
-  - One Spotify link per line, shuffled for variety
+- **`playlist_export_path`**: Output directory for randomized playlist link files
+  - Each configured playlist export writes one Spotify link file in this directory
 
 - **`grouped_songs_path`**: Input path for grouped song definitions
   - Used to keep grouped songs adjacent after randomization
 
-- **`tags_filter`**: Include/exclude tag logic for playlist text export
-  - `include` (list): Keep only songs with at least one of these tags. Empty = include all.
-  - `exclude` (list): Remove any song with any of these tags. Empty = exclude none.
+- **`playlist_exports`**: List of playlist text export definitions
+  - `filename` (string): Output filename written inside `playlist_export_path`
+  - `random` (optional bool): Shuffle songs before grouping/export. Defaults to `true` when omitted.
+  - `tags_filter.include` (list): Keep only songs with at least one of these tags. Empty = include all.
+  - `tags_filter.exclude` (list): Remove any song with any of these tags. Empty = exclude none.
 
 ### Runtime settings (`settings.json`)
 
@@ -98,22 +106,40 @@ Example:
 
 ```json
 {
-  "tags_filter": {
-    "include": ["featured"],
-    "exclude": ["blocked"]
-  }
+  "playlist_exports": [
+    {
+      "filename": "featured.txt",
+      "random": false,
+      "tags_filter": {
+        "include": ["featured"],
+        "exclude": ["blocked"]
+      }
+    }
+  ]
 }
 ```
 
-This keeps songs tagged `featured`, but removes any song that also has the `blocked` tag.
+This writes `featured.txt` containing songs tagged `featured`, while removing any song that also has the `blocked` tag.
 To exclude multiple tag variants, list each one separately:
 
 ```json
 {
-  "tags_filter": {
-    "include": ["preferred"],
-    "exclude": ["skip", "skipa", "skipb", "skipc"]
-  }
+  "playlist_exports": [
+    {
+      "filename": "preferred.txt",
+      "tags_filter": {
+        "include": ["preferred"],
+        "exclude": ["skip", "skipa", "skipb", "skipc"]
+      }
+    },
+    {
+      "filename": "all.txt",
+      "tags_filter": {
+        "include": [],
+        "exclude": []
+      }
+    }
+  ]
 }
 ```
 
