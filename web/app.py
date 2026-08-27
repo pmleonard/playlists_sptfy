@@ -7,11 +7,13 @@ from routes.import_routes import bp as import_bp
 from routes.possible_duplicates_routes import bp as possible_duplicates_bp
 from routes.settings_routes import bp as settings_bp
 from routes.songs_routes import bp as songs_bp
+from routes.update_routes import bp as update_bp
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
 app.register_blueprint(import_bp)
 app.register_blueprint(songs_bp)
+app.register_blueprint(update_bp)
 app.register_blueprint(export_bp)
 app.register_blueprint(grouped_songs_bp)
 app.register_blueprint(ignore_duplicates_bp)

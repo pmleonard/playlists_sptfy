@@ -45,7 +45,7 @@ function renderList(container, data) {
     ? keys.map((k) => `
       <li data-key="${escHtml(k)}">
         <span class="file-name">${escHtml(k)} <small style="color:#888">(${data[k].length} songs)</small></span>
-        <button class="btn btn-secondary btn-sm" data-action="edit" data-key="${escHtml(k)}">View/Edit</button>
+        <button class="btn btn-secondary btn-sm" data-action="edit" data-key="${escHtml(k)}">View</button>
         <button class="btn btn-danger btn-sm" data-action="delete" data-key="${escHtml(k)}">Delete</button>
       </li>`).join("")
     : `<li style="color:#888">No entries.</li>`;
@@ -104,36 +104,85 @@ async function handleAction(action, key, data, container, triggerBtn) {
   closeInlinePanel(list);
   if (isSamePanel) return;
 
-  const songs = data[key] || [];
   const panel = document.createElement("li");
   panel.className = "inline-item-panel";
   panel.dataset.for = key;
   panel.innerHTML = `
     <div class="inline-panel" style="width:100%">
-      <div class="card-header" style="margin-bottom:8px"><strong>Edit: ${escHtml(key)}</strong></div>
-      <div class="edit-songs-container"></div>
+      <div class="card-header" style="margin-bottom:8px"><strong>View: ${escHtml(key)}</strong></div>
+      <div class="songs-table-wrap"></div>
       <div class="flex-row mt-8">
-        <button class="btn btn-secondary btn-sm btn-add-song">+ Add Song</button>
-        <button class="btn btn-primary btn-sm save-btn">Save</button>
-        <button class="btn btn-secondary btn-sm close-panel-btn">Cancel</button>
+        <button class="btn btn-secondary btn-sm close-panel-btn">Close</button>
       </div>
     </div>`;
 
-  const sc = panel.querySelector(".edit-songs-container");
-  songs.forEach((s) => addSongSubform(sc, s));
-  panel.querySelector(".btn-add-song").onclick = () => addSongSubform(sc);
   panel.querySelector(".close-panel-btn").onclick = () => panel.remove();
-  panel.querySelector(".save-btn").onclick = async () => {
-    const updated = readSongSubforms(sc);
-    try {
-      await api("PUT", `${BASE}/${encodeURIComponent(key)}`, { songs: updated });
-      showToast("Saved");
-      render(container);
-    } catch (err) { showToast(err.message, "error"); }
-  };
-
   triggerBtn.closest("li").after(panel);
   panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  renderSongsTable(panel.querySelector(".songs-table-wrap"), key, data[key] || [], data, container);
+}
+
+function renderSongsTable(wrap, key, songs, data, container) {
+  if (!songs.length) {
+    wrap.innerHTML = `<p style="color:#888">No songs.</p>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:4px 6px">Artist</th>
+          <th style="text-align:left;padding:4px 6px">Title</th>
+          <th style="text-align:left;padding:4px 6px">Album</th>
+          <th style="text-align:left;padding:4px 6px">Released</th>
+          <th style="text-align:left;padding:4px 6px">Duration</th>
+          <th style="text-align:left;padding:4px 6px">Tags</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${songs.map((s, si) => `
+          <tr>
+            <td style="padding:4px 6px">${escHtml(s.artist || "")}</td>
+            <td style="padding:4px 6px">${escHtml(s.title || "")}</td>
+            <td style="padding:4px 6px">${escHtml(s.album || "")}</td>
+            <td style="padding:4px 6px">${String(s.released || "").slice(0, 10)}</td>
+            <td style="padding:4px 6px">${fmtDuration(s.duration)}</td>
+            <td style="padding:4px 6px">${escHtml(s.tags || "")}</td>
+            <td style="padding:4px 6px">
+              <button class="btn btn-danger btn-sm" data-song-idx="${si}">Delete</button>
+            </td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+
+  wrap.querySelectorAll("[data-song-idx]").forEach((btn) => {
+    btn.onclick = () => deleteSongFromEntry(key, parseInt(btn.dataset.songIdx, 10), data, container, wrap, btn);
+  });
+}
+
+async function deleteSongFromEntry(key, songIdx, data, container, wrap, btn) {
+  btn.disabled = true;
+  try {
+    const result = await api("DELETE", `${BASE}/${encodeURIComponent(key)}/songs/${songIdx}`);
+    showToast("Song removed");
+    if (result.entry_deleted) {
+      render(container);
+    } else {
+      const updated = await api("GET", `${BASE}/`);
+      renderSongsTable(wrap, key, updated[key] || [], updated, container);
+    }
+  } catch (err) {
+    showToast(err.message, "error");
+    btn.disabled = false;
+  }
+}
+
+function fmtDuration(secs) {
+  const n = parseInt(secs, 10);
+  if (isNaN(n)) return secs ?? "";
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
 }
 
 function addSongSubform(container, song = {}) {

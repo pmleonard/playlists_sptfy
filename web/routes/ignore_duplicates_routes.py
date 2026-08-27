@@ -39,6 +39,22 @@ def update(key):
     return jsonify({"ok": True})
 
 
+@bp.delete("/<path:key>/songs/<int:song_idx>")
+def delete_song(key, song_idx):
+    data = read_json(FILE)
+    if key not in data:
+        return jsonify({"error": "Key not found"}), 404
+    songs = data[key]
+    if song_idx < 0 or song_idx >= len(songs):
+        return jsonify({"error": "Song index out of range"}), 404
+    songs.pop(song_idx)
+    entry_deleted = len(songs) <= 1
+    if entry_deleted:
+        del data[key]
+    write_json(FILE, data)
+    return jsonify({"ok": True, "entry_deleted": entry_deleted})
+
+
 @bp.delete("/<path:key>")
 def delete(key):
     data = read_json(FILE)

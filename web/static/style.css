@@ -280,3 +280,8 @@ li.inline-item-panel .inline-panel {
 .mt-8 { margin-top: 8px; }
 .mt-16 { margin-top: 16px; }
 .mb-12 { margin-bottom: 12px; }
+
+/* Sort indicators */
+th[data-sort] { cursor: pointer; user-select: none; }
+th.sort-asc::after  { content: " ▲"; font-size: 10px; }
+th.sort-desc::after { content: " ▼"; font-size: 10px; }
