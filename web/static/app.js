@@ -1,6 +1,7 @@
 const tabModules = {
-  import: () => import("/static/tabs/import.js"),
   songs: () => import("/static/tabs/songs.js"),
+  update: () => import("/static/tabs/update.js"),
+  import: () => import("/static/tabs/import.js"),
   export: () => import("/static/tabs/export.js"),
   grouped_songs: () => import("/static/tabs/grouped_songs.js"),
   ignore_duplicates: () => import("/static/tabs/ignore_duplicates.js"),
@@ -55,4 +56,4 @@ document.getElementById("tabs").addEventListener("click", (e) => {
   if (btn) activateTab(btn.dataset.tab);
 });
 
-activateTab("import");
+activateTab("songs");

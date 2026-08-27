@@ -31,8 +31,21 @@ function draw(container, config) {
         </div>`).join("")}
 
       <div class="mt-16 mb-12"><strong>Playlist Exports</strong></div>
-      <div id="exports-container">
-        ${exports.map((ex, i) => exportSubform(ex, i)).join("")}
+      <div style="overflow-x:auto">
+        <table id="exports-table" style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="color:#888">
+              <th style="text-align:left;padding:4px 6px;font-weight:normal">Filename</th>
+              <th style="text-align:center;padding:4px 6px;font-weight:normal">Random</th>
+              <th style="text-align:left;padding:4px 6px;font-weight:normal">Include Tags</th>
+              <th style="text-align:left;padding:4px 6px;font-weight:normal">Exclude Tags</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="exports-body">
+            ${exports.map((ex) => exportRow(ex)).join("")}
+          </tbody>
+        </table>
       </div>
       <div class="flex-row mt-8">
         <button class="btn btn-secondary btn-sm" id="btn-add-export">+ Add Export</button>
@@ -41,9 +54,7 @@ function draw(container, config) {
     </div>`;
 
   container.querySelector("#btn-add-export").onclick = () => {
-    const ec = container.querySelector("#exports-container");
-    const idx = ec.querySelectorAll(".export-item").length;
-    ec.insertAdjacentHTML("beforeend", exportSubform({}, idx));
+    container.querySelector("#exports-body").insertAdjacentHTML("beforeend", exportRow({}));
     bindRemoveButtons(container);
   };
 
@@ -62,33 +73,27 @@ function draw(container, config) {
   };
 }
 
-function exportSubform(ex, i) {
+function exportRow(ex) {
   const inc = (ex.tags_filter?.include || []).join(", ");
   const excl = (ex.tags_filter?.exclude || []).join(", ");
   return `
-    <div class="export-item" data-export-idx="${i}">
-      <div class="export-item-header">
-        <strong>Export ${i + 1}</strong>
-        <button class="btn btn-danger btn-sm remove-export-btn">Remove</button>
-      </div>
-      <div class="form-group"><label>Filename</label><input class="ex-filename" type="text" value="${escHtml(ex.filename || "")}"></div>
-      <div class="form-group" style="display:flex;align-items:center;gap:8px">
-        <input class="ex-random" type="checkbox" id="ex-random-${i}" ${ex.random ? "checked" : ""}>
-        <label for="ex-random-${i}" style="font-weight:normal">Random order</label>
-      </div>
-      <div class="form-group"><label>Include tags (comma-separated)</label><input class="ex-include" type="text" value="${escHtml(inc)}"></div>
-      <div class="form-group"><label>Exclude tags (comma-separated)</label><input class="ex-exclude" type="text" value="${escHtml(excl)}"></div>
-    </div>`;
+    <tr class="export-row">
+      <td style="padding:4px 6px"><input class="ex-filename" type="text" value="${escHtml(ex.filename || "")}" style="width:100%"></td>
+      <td style="padding:4px 6px;text-align:center"><input class="ex-random" type="checkbox" ${ex.random ? "checked" : ""}></td>
+      <td style="padding:4px 6px"><input class="ex-include" type="text" value="${escHtml(inc)}" style="width:100%"></td>
+      <td style="padding:4px 6px"><input class="ex-exclude" type="text" value="${escHtml(excl)}" style="width:100%"></td>
+      <td style="padding:4px 6px"><button class="btn btn-danger btn-sm remove-export-btn">Remove</button></td>
+    </tr>`;
 }
 
 function bindRemoveButtons(container) {
   container.querySelectorAll(".remove-export-btn").forEach((btn) => {
-    btn.onclick = () => btn.closest(".export-item").remove();
+    btn.onclick = () => btn.closest(".export-row").remove();
   });
 }
 
 function readExports(container) {
-  return [...container.querySelectorAll(".export-item")].map((el) => ({
+  return [...container.querySelectorAll(".export-row")].map((el) => ({
     filename: el.querySelector(".ex-filename").value.trim(),
     random: el.querySelector(".ex-random").checked,
     tags_filter: {
