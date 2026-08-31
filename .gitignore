@@ -21,3 +21,4 @@ build/
 /data/song_lists/*.json
 /data/song_lists/*.md
 /.run/Run playlists_sptfy.run.xml
+/.run/Start Docker Compose.run.xml

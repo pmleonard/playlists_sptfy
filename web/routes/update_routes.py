@@ -1,33 +1,35 @@
-import os
-import subprocess
-from pathlib import Path
+import io
+import logging
 
 from file_utils import read_json
 from flask import Blueprint, jsonify
 
-bp = Blueprint("update", __name__, url_prefix="/api/update")
+from playlists_sptfy.main import main as run_pipeline
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_TIMEOUT = int(os.environ.get("UPDATE_TIMEOUT_SECONDS", 300))
+bp = Blueprint("update", __name__, url_prefix="/api/update")
 
 
 @bp.post("/run")
 def run():
+    log_stream = io.StringIO()
+    handler = logging.StreamHandler(log_stream)
+    handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+    root_logger = logging.getLogger()
+    root_logger.addHandler(handler)
     try:
-        result = subprocess.run(
-            ["make", "run"],
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=_TIMEOUT,
-        )
-    except subprocess.TimeoutExpired:
-        return jsonify({"ok": False, "returncode": -1, "stderr": "Timed out"}), 200
+        run_pipeline()
+        ok = True
+    except Exception:
+        logging.getLogger(__name__).exception("Update pipeline failed")
+        ok = False
+    finally:
+        root_logger.removeHandler(handler)
+
     return jsonify(
         {
-            "ok": result.returncode == 0,
-            "returncode": result.returncode,
-            "stderr": result.stderr[-4000:],
+            "ok": ok,
+            "returncode": 0 if ok else 1,
+            "stderr": log_stream.getvalue()[-4000:],
         }
     )
 
