@@ -73,7 +73,7 @@ def classify_song(song: dict) -> str | None:
 
 
 def is_likely_reissue(album: str) -> bool:
-    a = (album or "").lower()
+    a = str(album or "").lower()
     return any(kw in a for kw in REISSUE_KEYWORDS)
 
 
@@ -105,7 +105,7 @@ def candidate_year(song, all_songs, dup_data, ignore_data) -> int | None:
 
 
 def normalize_album(album: str) -> str:
-    stripped = REISSUE_QUALIFIER.sub("", album or "")
+    stripped = REISSUE_QUALIFIER.sub("", str(album or ""))
     return " ".join(stripped.split()).strip().lower()
 
 
@@ -121,8 +121,8 @@ def find_album_clusters(songs: list[dict]) -> list[dict]:
     clusters: dict[tuple[str, str], dict] = {}
 
     for song in songs:
-        album = song.get("album") or ""
-        if not str(album).strip():
+        album = str(song.get("album") or "").strip()
+        if not album:
             continue
         artist = str(song.get("artist", "")).strip()
         key = (artist.lower(), normalize_album(album))
