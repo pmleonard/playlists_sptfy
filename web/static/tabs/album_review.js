@@ -1,6 +1,7 @@
 import { api, showToast, showConfirm } from "/static/app.js";
 
 let clusters = [];
+let filters = { multiOnly: false, gapsCount: "" }; // gapsCount: "" = All
 
 export async function render(container) {
   container.innerHTML = `<p class="loading">Loading…</p>`;
@@ -10,6 +11,7 @@ export async function render(container) {
     container.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
     return;
   }
+  filters = { multiOnly: false, gapsCount: "" };
   draw(container);
 }
 
@@ -19,9 +21,60 @@ function draw(container) {
     return;
   }
 
-  container.innerHTML = clusters.map((c, ci) => clusterHtml(c, ci)).join("");
+  const gapsCounts = [...new Set(clusters.map((c) => c.gaps.length))].sort((a, b) => a - b);
 
-  container.querySelectorAll("[data-action='merge']").forEach((btn) => {
+  container.innerHTML = `
+    <div class="card">
+      <div class="flex-row" style="flex-wrap:wrap;gap:20px">
+        <label class="flex-row" style="gap:6px">
+          <input type="checkbox" id="filter-multi">
+          Only albums with multiple titles
+        </label>
+        <label class="flex-row" style="gap:6px">
+          Missing tracks:
+          <select id="filter-gaps">
+            <option value="">All</option>
+            ${gapsCounts.map((n) => `<option value="${n}">${n}</option>`).join("")}
+          </select>
+        </label>
+        <span id="filter-status" style="color:#888;margin-left:auto"></span>
+      </div>
+    </div>
+    <div id="cluster-list"></div>`;
+
+  const multiCb = container.querySelector("#filter-multi");
+  const gapsSelect = container.querySelector("#filter-gaps");
+  multiCb.checked = filters.multiOnly;
+  gapsSelect.value = filters.gapsCount;
+
+  multiCb.addEventListener("change", () => {
+    filters.multiOnly = multiCb.checked;
+    renderList(container);
+  });
+  gapsSelect.addEventListener("change", () => {
+    filters.gapsCount = gapsSelect.value;
+    renderList(container);
+  });
+
+  renderList(container);
+}
+
+function renderList(container) {
+  const filtered = clusters.filter((c) => {
+    if (filters.multiOnly && c.variants.length <= 1) return false;
+    if (filters.gapsCount !== "" && c.gaps.length !== parseInt(filters.gapsCount, 10)) return false;
+    return true;
+  });
+
+  const list = container.querySelector("#cluster-list");
+  list.innerHTML = filtered.length
+    ? filtered.map((c) => clusterHtml(c, clusters.indexOf(c))).join("")
+    : `<p style="color:#888">No albums match the current filters.</p>`;
+
+  container.querySelector("#filter-status").textContent =
+    `Showing ${filtered.length} of ${clusters.length}`;
+
+  list.querySelectorAll("[data-action='merge']").forEach((btn) => {
     btn.addEventListener("click", () => handleMerge(container, btn));
   });
 }
