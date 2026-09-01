@@ -1,10 +1,10 @@
 const tabModules = {
   songs: () => import("/static/tabs/songs.js"),
-  tags: () => import("/static/tabs/tag_review.js"),
-  albums: () => import("/static/tabs/album_review.js"),
   update: () => import("/static/tabs/update.js"),
   import: () => import("/static/tabs/import.js"),
   export: () => import("/static/tabs/export.js"),
+  tags: () => import("/static/tabs/tag_review.js"),
+  albums: () => import("/static/tabs/album_review.js"),
   grouped_songs: () => import("/static/tabs/grouped_songs.js"),
   ignore_duplicates: () => import("/static/tabs/ignore_duplicates.js"),
   possible_duplicates: () => import("/static/tabs/possible_duplicates.js"),
