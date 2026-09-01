@@ -1,7 +1,11 @@
 import { api, showToast, showConfirm } from "/static/app.js";
 
 let clusters = [];
-let filters = { multiOnly: false, gapsCount: "" }; // gapsCount: "" = All
+let filters = { multiOnly: false, gapsCount: "", minTracks: "" }; // "" = All / no minimum
+
+function unionTracks(c) {
+  return [...new Set(c.variants.flatMap((v) => v.tracks))].sort((a, b) => a - b);
+}
 
 export async function render(container) {
   container.innerHTML = `<p class="loading">Loading…</p>`;
@@ -11,7 +15,7 @@ export async function render(container) {
     container.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
     return;
   }
-  filters = { multiOnly: false, gapsCount: "" };
+  filters = { multiOnly: false, gapsCount: "", minTracks: "" };
   draw(container);
 }
 
@@ -22,6 +26,7 @@ function draw(container) {
   }
 
   const gapsCounts = [...new Set(clusters.map((c) => c.gaps.length))].sort((a, b) => a - b);
+  const trackCounts = [...new Set(clusters.map((c) => unionTracks(c).length))].sort((a, b) => a - b);
 
   container.innerHTML = `
     <div class="card">
@@ -37,6 +42,13 @@ function draw(container) {
             ${gapsCounts.map((n) => `<option value="${n}">${n}</option>`).join("")}
           </select>
         </label>
+        <label class="flex-row" style="gap:6px">
+          Tracks (at least):
+          <select id="filter-min-tracks">
+            <option value="">All</option>
+            ${trackCounts.map((n) => `<option value="${n}">${n}</option>`).join("")}
+          </select>
+        </label>
         <span id="filter-status" style="color:#888;margin-left:auto"></span>
       </div>
     </div>
@@ -44,8 +56,10 @@ function draw(container) {
 
   const multiCb = container.querySelector("#filter-multi");
   const gapsSelect = container.querySelector("#filter-gaps");
+  const minTracksSelect = container.querySelector("#filter-min-tracks");
   multiCb.checked = filters.multiOnly;
   gapsSelect.value = filters.gapsCount;
+  minTracksSelect.value = filters.minTracks;
 
   multiCb.addEventListener("change", () => {
     filters.multiOnly = multiCb.checked;
@@ -53,6 +67,10 @@ function draw(container) {
   });
   gapsSelect.addEventListener("change", () => {
     filters.gapsCount = gapsSelect.value;
+    renderList(container);
+  });
+  minTracksSelect.addEventListener("change", () => {
+    filters.minTracks = minTracksSelect.value;
     renderList(container);
   });
 
@@ -63,6 +81,7 @@ function renderList(container) {
   const filtered = clusters.filter((c) => {
     if (filters.multiOnly && c.variants.length <= 1) return false;
     if (filters.gapsCount !== "" && c.gaps.length !== parseInt(filters.gapsCount, 10)) return false;
+    if (filters.minTracks !== "" && unionTracks(c).length < parseInt(filters.minTracks, 10)) return false;
     return true;
   });
 
@@ -163,13 +182,13 @@ async function handleMerge(container, btn) {
     // rename, so the union (and therefore any gaps) is unchanged — the cluster
     // fully resolves only if it had no gaps; otherwise it collapses to one
     // variant but stays in the list (US-04 AC4).
-    const unionTracks = [...new Set(cluster.variants.flatMap((v) => v.tracks))].sort((a, b) => a - b);
+    const tracks = unionTracks(cluster);
     if (cluster.gaps.length === 0) {
       clusters = clusters.filter((_, i) => i !== ci);
     } else {
       clusters = clusters.map((c, i) =>
         i === ci
-          ? { ...c, variants: [{ album: toAlbum, track_count: unionTracks.length, tracks: unionTracks }] }
+          ? { ...c, variants: [{ album: toAlbum, track_count: tracks.length, tracks }] }
           : c
       );
     }
