@@ -9,6 +9,7 @@ const CATEGORIES = [
 
 let rows = [];
 const dismissed = new Set();
+let activeTags = new Set();
 
 export async function render(container) {
   container.innerHTML = `<p class="loading">Loading…</p>`;
@@ -18,12 +19,45 @@ export async function render(container) {
     container.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
     return;
   }
+  activeTags = new Set();
   draw(container);
 }
 
 function draw(container) {
   const visible = rows.filter((r) => !dismissed.has(r.idx));
-  container.innerHTML = CATEGORIES.map(({ key, label }) => sectionHtml(key, label, visible)).join("");
+  const filtered = activeTags.size
+    ? visible.filter((r) => (r.current_tags || []).some((t) => activeTags.has(t)))
+    : visible;
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="tag-filters" id="tag-filters">
+        ${ERA_TAGS.map(
+          (t) =>
+            `<button class="tag-btn ${activeTags.has(t) ? "active" : ""}" data-tag="${t}">${t}</button>`
+        ).join("")}
+      </div>
+      <div class="flex-row mt-8">
+        <button class="btn btn-danger btn-sm" id="dismiss-all-btn" ${activeTags.size === 0 ? "disabled" : ""}>
+          Dismiss All Filtered${activeTags.size ? ` (${filtered.length})` : ""}
+        </button>
+      </div>
+    </div>
+    ${CATEGORIES.map(({ key, label }) => sectionHtml(key, label, filtered)).join("")}`;
+
+  container.querySelector("#tag-filters").addEventListener("click", (e) => {
+    const btn = e.target.closest(".tag-btn");
+    if (!btn) return;
+    const tag = btn.dataset.tag;
+    if (activeTags.has(tag)) activeTags.delete(tag);
+    else activeTags.add(tag);
+    draw(container);
+  });
+
+  container.querySelector("#dismiss-all-btn").addEventListener("click", () => {
+    filtered.forEach((r) => dismissed.add(r.idx));
+    draw(container);
+  });
 
   container.querySelectorAll("[data-action='save']").forEach((btn) => {
     btn.addEventListener("click", () => handleSave(container, btn));
