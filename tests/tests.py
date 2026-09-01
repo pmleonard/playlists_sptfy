@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 main_module = importlib.import_module("playlists_sptfy.main")
 exporters_module = importlib.import_module("playlists_sptfy.exporters")
+cleaning_module = importlib.import_module("playlists_sptfy.cleaning")
 cli_module = importlib.import_module("playlists_sptfy.__main__")
 
 find_duplicates = main_module.find_duplicates
@@ -69,6 +70,97 @@ def test_merge_tags_sorts_result() -> None:
 
 def test_normalize_tags_lowercases_and_deduplicates() -> None:
     assert normalize_tags("Rock, rock,  POP ,pop") == "pop, rock"
+
+
+def test_strip_spotify_suffix_removes_exact_suffix() -> None:
+    assert cleaning_module.strip_spotify_suffix("Abbey Road | Spotify") == "Abbey Road"
+
+
+def test_strip_spotify_suffix_leaves_unrelated_text_untouched() -> None:
+    assert cleaning_module.strip_spotify_suffix("Abbey Road") == "Abbey Road"
+
+
+def test_strip_pipe_chars_removes_remaining_pipes_and_collapses_whitespace() -> None:
+    assert cleaning_module.strip_pipe_chars("Live | In Concert") == "Live In Concert"
+
+
+def test_strip_pipe_chars_leaves_text_without_pipes_untouched() -> None:
+    assert cleaning_module.strip_pipe_chars("Abbey Road") == "Abbey Road"
+
+
+def test_clean_scraped_text_applies_both_cleanups_in_order() -> None:
+    assert cleaning_module.clean_scraped_text("Live | In Concert | Spotify") == "Live In Concert"
+
+
+def test_strip_album_type_suffix_removes_album_by_artist() -> None:
+    assert (
+        cleaning_module.strip_album_type_suffix("Bad Company (Remastered) - Album by Bad Company")
+        == "Bad Company (Remastered)"
+    )
+
+
+def test_strip_album_type_suffix_covers_compilation_single_and_ep() -> None:
+    assert (
+        cleaning_module.strip_album_type_suffix("Greatest Hits - Compilation by Artist")
+        == "Greatest Hits"
+    )
+    assert cleaning_module.strip_album_type_suffix("Some Song - Single by Artist") == "Some Song"
+    assert cleaning_module.strip_album_type_suffix("Some EP - EP by Artist") == "Some EP"
+
+
+def test_strip_album_type_suffix_leaves_unrelated_text_untouched() -> None:
+    assert cleaning_module.strip_album_type_suffix("Abbey Road") == "Abbey Road"
+
+
+def test_clean_scraped_album_text_strips_spotify_suffix_and_album_type_suffix() -> None:
+    assert (
+        cleaning_module.clean_scraped_album_text(
+            "Bad Company (Remastered) - Album by Bad Company | Spotify"
+        )
+        == "Bad Company (Remastered)"
+    )
+
+
+class _FakeTag:
+    def __init__(self, attrs):
+        self.attrs = attrs
+
+
+def test_extract_meta_cleans_scraped_title(monkeypatch) -> None:
+    tags = [
+        _FakeTag({"property": "og:title", "content": "Paint It Black | Spotify"}),
+        _FakeTag({"name": "music:musician_description", "content": "The Rolling Stones"}),
+        _FakeTag({"name": "music:release_date", "content": "1966-05-06"}),
+        _FakeTag({"name": "music:duration", "content": "125"}),
+        _FakeTag({"name": "music:album", "content": ""}),
+        _FakeTag({"name": "music:album:track", "content": "4"}),
+    ]
+    monkeypatch.setattr(main_module, "get_url_meta", lambda _url: tags)
+
+    song = main_module.extract_meta({"link": "https://example.com/track", "tags": ""})
+
+    assert song["title"] == "Paint It Black"
+
+
+def test_extract_album_cleans_scraped_album_title(monkeypatch) -> None:
+    tags = [_FakeTag({"property": "og:title", "content": "Aftermath | Spotify"})]
+    monkeypatch.setattr(main_module, "get_url_meta", lambda _url: tags)
+
+    assert main_module.extract_album("https://example.com/album") == "Aftermath"
+
+
+def test_extract_album_strips_album_type_suffix(monkeypatch) -> None:
+    tags = [
+        _FakeTag(
+            {
+                "property": "og:title",
+                "content": "Bad Company (Remastered) - Album by Bad Company | Spotify",
+            }
+        )
+    ]
+    monkeypatch.setattr(main_module, "get_url_meta", lambda _url: tags)
+
+    assert main_module.extract_album("https://example.com/album") == "Bad Company (Remastered)"
 
 
 def test_tag_filter_songs_include_and_exclude_logic() -> None:
@@ -755,9 +847,9 @@ def test_main_orchestration_uses_filtered_grouped_songs_for_playlist_export(monk
     monkeypatch.setattr(
         main_module,
         "write_json_file",
-        lambda data, path: captured.__setitem__("dups", data)
-        if "possible_duplicates" in str(path)
-        else None,
+        lambda data, path: (
+            captured.__setitem__("dups", data) if "possible_duplicates" in str(path) else None
+        ),
     )
     monkeypatch.setattr(main_module, "write_duplicates_markdown", lambda _dups, _path: None)
     # Freeze shuffle for deterministic assertions.
