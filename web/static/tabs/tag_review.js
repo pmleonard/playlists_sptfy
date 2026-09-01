@@ -23,11 +23,17 @@ export async function render(container) {
   draw(container);
 }
 
+function matchesTagFilter(r) {
+  if (!activeTags.size) return true;
+  // Missing rows have no current tag by definition — filter those by the
+  // decade the row is missing (Expected column) instead.
+  if (r.category === "missing") return activeTags.has(r.expected_decade);
+  return (r.current_tags || []).some((t) => activeTags.has(t));
+}
+
 function draw(container) {
   const visible = rows.filter((r) => !dismissed.has(r.idx));
-  const filtered = activeTags.size
-    ? visible.filter((r) => (r.current_tags || []).some((t) => activeTags.has(t)))
-    : visible;
+  const filtered = visible.filter(matchesTagFilter);
 
   container.innerHTML = `
     <div class="card">
