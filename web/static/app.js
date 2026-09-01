@@ -3,6 +3,7 @@ const tabModules = {
   update: () => import("/static/tabs/update.js"),
   import: () => import("/static/tabs/import.js"),
   export: () => import("/static/tabs/export.js"),
+  genres: () => import("/static/tabs/genre_review.js"),
   tags: () => import("/static/tabs/tag_review.js"),
   albums: () => import("/static/tabs/album_review.js"),
   grouped_songs: () => import("/static/tabs/grouped_songs.js"),
