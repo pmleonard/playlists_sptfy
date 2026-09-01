@@ -1,4 +1,4 @@
-import { api, showToast } from "/static/app.js";
+import { api, showConfirm, showToast } from "/static/app.js";
 
 const ERA_TAGS = ["50s", "60s", "70s", "80s", "90s", "2000s", "2010s"];
 const CATEGORIES = [
@@ -8,7 +8,7 @@ const CATEGORIES = [
 ];
 
 let rows = [];
-const dismissed = new Set();
+const dismissed = new Set(); // session-only, "multiple" rows only
 let activeTags = new Set();
 
 export async function render(container) {
@@ -34,6 +34,9 @@ function matchesTagFilter(r) {
 function draw(container) {
   const visible = rows.filter((r) => !dismissed.has(r.idx));
   const filtered = visible.filter(matchesTagFilter);
+  const byCategory = Object.fromEntries(
+    CATEGORIES.map(({ key }) => [key, filtered.filter((r) => r.category === key)])
+  );
 
   container.innerHTML = `
     <div class="card">
@@ -43,13 +46,8 @@ function draw(container) {
             `<button class="tag-btn ${activeTags.has(t) ? "active" : ""}" data-tag="${t}">${t}</button>`
         ).join("")}
       </div>
-      <div class="flex-row mt-8">
-        <button class="btn btn-danger btn-sm" id="dismiss-all-btn" ${activeTags.size === 0 ? "disabled" : ""}>
-          Dismiss All Filtered${activeTags.size ? ` (${filtered.length})` : ""}
-        </button>
-      </div>
     </div>
-    ${CATEGORIES.map(({ key, label }) => sectionHtml(key, label, filtered)).join("")}`;
+    ${CATEGORIES.map(({ key, label }) => sectionHtml(key, label, byCategory[key])).join("")}`;
 
   container.querySelector("#tag-filters").addEventListener("click", (e) => {
     const btn = e.target.closest(".tag-btn");
@@ -60,10 +58,25 @@ function draw(container) {
     draw(container);
   });
 
-  container.querySelector("#dismiss-all-btn").addEventListener("click", () => {
-    filtered.forEach((r) => dismissed.add(r.idx));
-    draw(container);
-  });
+  const dismissAllBtn = container.querySelector("[data-action='dismiss-all-mismatch']");
+  if (dismissAllBtn) {
+    dismissAllBtn.addEventListener("click", () => {
+      handleDismissMismatch(
+        container,
+        byCategory.mismatch.map((r) => r.idx)
+      );
+    });
+  }
+
+  const applyAllBtn = container.querySelector("[data-action='apply-expected-all']");
+  if (applyAllBtn) {
+    applyAllBtn.addEventListener("click", () => {
+      handleApplyExpectedBulk(
+        container,
+        byCategory.missing.map((r) => r.idx)
+      );
+    });
+  }
 
   container.querySelectorAll("[data-action='save']").forEach((btn) => {
     btn.addEventListener("click", () => handleSave(container, btn));
@@ -71,18 +84,38 @@ function draw(container) {
   container.querySelectorAll("[data-action='dismiss']").forEach((btn) => {
     btn.addEventListener("click", () => handleDismiss(container, btn));
   });
+  container.querySelectorAll("[data-action='dismiss-mismatch']").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      handleDismissMismatch(container, [parseInt(btn.dataset.idx, 10)])
+    );
+  });
 }
 
-function sectionHtml(key, label, visible) {
-  const sectionRows = visible.filter((r) => r.category === key);
+function sectionHtml(key, label, sectionRows) {
   return `
     <div class="card">
-      <div class="card-header"><strong>${label} (${sectionRows.length})</strong></div>
-      ${sectionRows.length ? tableHtml(sectionRows) : `<p style="color:#888">No ${label.toLowerCase()} songs found.</p>`}
+      <div class="card-header">
+        <strong>${label} (${sectionRows.length})</strong>
+        ${bulkActionHtml(key, sectionRows)}
+      </div>
+      ${sectionRows.length ? tableHtml(key, sectionRows) : `<p style="color:#888">No ${label.toLowerCase()} songs found.</p>`}
     </div>`;
 }
 
-function tableHtml(sectionRows) {
+function bulkActionHtml(key, sectionRows) {
+  const enabled = activeTags.size > 0 && sectionRows.length > 0;
+  const countSuffix = activeTags.size ? ` (${sectionRows.length})` : "";
+
+  if (key === "mismatch") {
+    return `<button class="btn btn-danger btn-sm" data-action="dismiss-all-mismatch" ${enabled ? "" : "disabled"}>Dismiss All Filtered${countSuffix}</button>`;
+  }
+  if (key === "missing") {
+    return `<button class="btn btn-primary btn-sm" data-action="apply-expected-all" ${enabled ? "" : "disabled"}>Apply Expected Tag to All Filtered${countSuffix}</button>`;
+  }
+  return "";
+}
+
+function tableHtml(category, sectionRows) {
   return `
     <div style="overflow-x:auto">
       <table>
@@ -100,13 +133,21 @@ function tableHtml(sectionRows) {
           </tr>
         </thead>
         <tbody>
-          ${sectionRows.map(rowHtml).join("")}
+          ${sectionRows.map((r) => rowHtml(category, r)).join("")}
         </tbody>
       </table>
     </div>`;
 }
 
-function rowHtml(r) {
+function dismissButtonHtml(category, r) {
+  if (category === "missing") return ""; // not applicable — nothing to "not an issue" about a blank tag
+  if (category === "mismatch") {
+    return `<button class="btn btn-sm btn-secondary" data-action="dismiss-mismatch" data-idx="${r.idx}">Dismiss</button>`;
+  }
+  return `<button class="btn btn-sm btn-secondary" data-action="dismiss" data-idx="${r.idx}">Dismiss</button>`;
+}
+
+function rowHtml(category, r) {
   const options = [`<option value="">(none)</option>`]
     .concat(
       ERA_TAGS.map(
@@ -129,7 +170,7 @@ function rowHtml(r) {
         <div class="flex-row">
           <select class="era-select">${options}</select>
           <button class="btn btn-primary btn-sm" data-action="save" data-idx="${r.idx}">Save</button>
-          <button class="btn btn-secondary btn-sm" data-action="dismiss" data-idx="${r.idx}">Dismiss</button>
+          ${dismissButtonHtml(category, r)}
         </div>
       </td>
     </tr>`;
@@ -157,6 +198,44 @@ function handleDismiss(container, btn) {
   const idx = parseInt(btn.dataset.idx, 10);
   dismissed.add(idx);
   draw(container);
+}
+
+async function handleDismissMismatch(container, idxs) {
+  if (!idxs.length) return;
+  if (idxs.length > 1) {
+    const ok = await showConfirm(
+      `Permanently dismiss ${idxs.length} mismatched song(s) matching the current filter? Unlike other dismiss actions, this persists — they won't reappear on reload.`
+    );
+    if (!ok) return;
+  }
+
+  try {
+    await api("POST", "/api/tag-review/dismiss-mismatch", { idxs });
+    showToast(idxs.length > 1 ? `${idxs.length} mismatch(es) dismissed` : "Dismissed");
+    const idxSet = new Set(idxs);
+    rows = rows.filter((r) => !idxSet.has(r.idx));
+    draw(container);
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+}
+
+async function handleApplyExpectedBulk(container, idxs) {
+  if (!idxs.length) return;
+  const ok = await showConfirm(
+    `Apply the expected era tag to ${idxs.length} missing song(s) matching the current filter?`
+  );
+  if (!ok) return;
+
+  try {
+    const result = await api("POST", "/api/tag-review/apply-expected-bulk", { idxs });
+    showToast(`${result.changed} tag(s) applied`);
+    const idxSet = new Set(idxs);
+    rows = rows.filter((r) => !idxSet.has(r.idx));
+    draw(container);
+  } catch (err) {
+    showToast(err.message, "error");
+  }
 }
 
 function fmtDate(d) {
