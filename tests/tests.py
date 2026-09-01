@@ -92,6 +92,35 @@ def test_clean_scraped_text_applies_both_cleanups_in_order() -> None:
     assert cleaning_module.clean_scraped_text("Live | In Concert | Spotify") == "Live In Concert"
 
 
+def test_strip_album_type_suffix_removes_album_by_artist() -> None:
+    assert (
+        cleaning_module.strip_album_type_suffix("Bad Company (Remastered) - Album by Bad Company")
+        == "Bad Company (Remastered)"
+    )
+
+
+def test_strip_album_type_suffix_covers_compilation_single_and_ep() -> None:
+    assert (
+        cleaning_module.strip_album_type_suffix("Greatest Hits - Compilation by Artist")
+        == "Greatest Hits"
+    )
+    assert cleaning_module.strip_album_type_suffix("Some Song - Single by Artist") == "Some Song"
+    assert cleaning_module.strip_album_type_suffix("Some EP - EP by Artist") == "Some EP"
+
+
+def test_strip_album_type_suffix_leaves_unrelated_text_untouched() -> None:
+    assert cleaning_module.strip_album_type_suffix("Abbey Road") == "Abbey Road"
+
+
+def test_clean_scraped_album_text_strips_spotify_suffix_and_album_type_suffix() -> None:
+    assert (
+        cleaning_module.clean_scraped_album_text(
+            "Bad Company (Remastered) - Album by Bad Company | Spotify"
+        )
+        == "Bad Company (Remastered)"
+    )
+
+
 class _FakeTag:
     def __init__(self, attrs):
         self.attrs = attrs
@@ -118,6 +147,20 @@ def test_extract_album_cleans_scraped_album_title(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "get_url_meta", lambda _url: tags)
 
     assert main_module.extract_album("https://example.com/album") == "Aftermath"
+
+
+def test_extract_album_strips_album_type_suffix(monkeypatch) -> None:
+    tags = [
+        _FakeTag(
+            {
+                "property": "og:title",
+                "content": "Bad Company (Remastered) - Album by Bad Company | Spotify",
+            }
+        )
+    ]
+    monkeypatch.setattr(main_module, "get_url_meta", lambda _url: tags)
+
+    assert main_module.extract_album("https://example.com/album") == "Bad Company (Remastered)"
 
 
 def test_tag_filter_songs_include_and_exclude_logic() -> None:

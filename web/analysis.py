@@ -117,6 +117,19 @@ def find_gaps(track_numbers: list[int]) -> list[int]:
     return [n for n in range(lo, hi + 1) if n not in present]
 
 
+def parse_track(track) -> int | None:
+    """Coerce a song's track field to int; some records store it as a numeric
+    string (or blank string) rather than an int, which would otherwise make
+    that track silently vanish from gap detection."""
+    if isinstance(track, bool):
+        return None
+    if isinstance(track, int):
+        return track
+    if isinstance(track, str) and track.strip().isdigit():
+        return int(track.strip())
+    return None
+
+
 def find_album_clusters(songs: list[dict]) -> list[dict]:
     clusters: dict[tuple[str, str], dict] = {}
 
@@ -130,8 +143,8 @@ def find_album_clusters(songs: list[dict]) -> list[dict]:
             key, {"artist": artist, "normalized_key": key[1], "variants": {}}
         )
         variant = cluster["variants"].setdefault(album, {"album": album, "tracks": set()})
-        track = song.get("track")
-        if isinstance(track, int):
+        track = parse_track(song.get("track"))
+        if track is not None:
             variant["tracks"].add(track)
 
     result = []

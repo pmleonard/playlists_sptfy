@@ -14,7 +14,7 @@ if globals().get("__package__") in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     globals()["__package__"] = "playlists_sptfy"
 
-from .cleaning import clean_scraped_text
+from .cleaning import clean_scraped_album_text, clean_scraped_text
 from .config import load_settings as load_settings_from_paths
 from .exporters import (
     write_duplicates_markdown,
@@ -489,7 +489,7 @@ def extract_album(url):
         meta = get_url_meta(url)
         for tag in meta:
             if "property" in tag.attrs and tag.attrs["property"].strip().lower() == "og:title":
-                response = clean_scraped_text(tag.attrs["content"])
+                response = clean_scraped_album_text(tag.attrs["content"])
     except Exception:
         logger.exception("Failed to extract album metadata from URL: %s", url)
     return response
