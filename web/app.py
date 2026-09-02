@@ -2,6 +2,7 @@ from flask import Flask, send_from_directory
 from routes.album_review_routes import bp as album_review_bp
 from routes.config_routes import bp as config_bp
 from routes.export_routes import bp as export_bp
+from routes.genre_review_routes import bp as genre_review_bp
 from routes.grouped_songs_routes import bp as grouped_songs_bp
 from routes.ignore_duplicates_routes import bp as ignore_duplicates_bp
 from routes.import_routes import bp as import_bp
@@ -24,6 +25,7 @@ app.register_blueprint(config_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(tag_review_bp)
 app.register_blueprint(album_review_bp)
+app.register_blueprint(genre_review_bp)
 
 
 @app.get("/")
