@@ -16,6 +16,7 @@ GENRE_TAGS = {
     "rnb",
     "jazz",
     "soul",
+    "holiday",
 }
 
 

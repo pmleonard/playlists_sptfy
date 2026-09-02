@@ -14,6 +14,7 @@ const GENRE_TAGS = [
   "rnb",
   "jazz",
   "soul",
+  "holiday",
 ];
 const CATEGORIES = [
   { key: "mismatch", label: "Mismatch" },
@@ -72,25 +73,23 @@ function draw(container) {
     draw(container);
   });
 
-  const dismissAllBtn = container.querySelector("[data-action='dismiss-all-mismatch']");
-  if (dismissAllBtn) {
-    dismissAllBtn.addEventListener("click", () => {
+  container.querySelectorAll("[data-action='dismiss-all-mismatch']").forEach((btn) => {
+    btn.addEventListener("click", () => {
       handleDismissMismatch(
         container,
-        byCategory.mismatch.map((r) => r.idx)
+        byCategory[btn.dataset.category].map((r) => r.idx)
       );
     });
-  }
+  });
 
-  const applyAllBtn = container.querySelector("[data-action='apply-proposed-all']");
-  if (applyAllBtn) {
-    applyAllBtn.addEventListener("click", () => {
+  container.querySelectorAll("[data-action='apply-proposed-all']").forEach((btn) => {
+    btn.addEventListener("click", () => {
       handleApplyProposedBulk(
         container,
-        byCategory.missing.map((r) => r.idx)
+        byCategory[btn.dataset.category].map((r) => r.idx)
       );
     });
-  }
+  });
 
   container.querySelectorAll("[data-action='save']").forEach((btn) => {
     btn.addEventListener("click", () => handleSave(container, btn));
@@ -121,10 +120,14 @@ function bulkActionHtml(key, sectionRows) {
   const countSuffix = activeTags.size ? ` (${sectionRows.length})` : "";
 
   if (key === "mismatch") {
-    return `<button class="btn btn-danger btn-sm" data-action="dismiss-all-mismatch" ${enabled ? "" : "disabled"}>Dismiss All Filtered${countSuffix}</button>`;
+    return `
+      <div class="flex-row" style="gap:8px">
+        <button class="btn btn-primary btn-sm" data-action="apply-proposed-all" data-category="mismatch" ${enabled ? "" : "disabled"}>Apply Proposed Tag to All Filtered${countSuffix}</button>
+        <button class="btn btn-danger btn-sm" data-action="dismiss-all-mismatch" data-category="mismatch" ${enabled ? "" : "disabled"}>Dismiss All Filtered${countSuffix}</button>
+      </div>`;
   }
   if (key === "missing") {
-    return `<button class="btn btn-primary btn-sm" data-action="apply-proposed-all" ${enabled ? "" : "disabled"}>Apply Proposed Tag to All Filtered${countSuffix}</button>`;
+    return `<button class="btn btn-primary btn-sm" data-action="apply-proposed-all" data-category="missing" ${enabled ? "" : "disabled"}>Apply Proposed Tag to All Filtered${countSuffix}</button>`;
   }
   return "";
 }
@@ -233,7 +236,7 @@ async function handleDismissMismatch(container, idxs) {
 async function handleApplyProposedBulk(container, idxs) {
   if (!idxs.length) return;
   const ok = await showConfirm(
-    `Apply the proposed genre tag to ${idxs.length} missing song(s) matching the current filter?`
+    `Apply the proposed genre tag to ${idxs.length} song(s) matching the current filter?`
   );
   if (!ok) return;
 
