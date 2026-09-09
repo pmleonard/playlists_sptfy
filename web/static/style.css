@@ -22,6 +22,26 @@ nav#tabs {
   display: flex;
   gap: 2px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.tab-group-label {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 4px 0 6px;
+  white-space: nowrap;
+}
+
+.tab-group-label:first-child { margin-left: 0; }
+
+.tab-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.3);
+  margin: 0 6px;
 }
 
 .tab-btn {
@@ -158,6 +178,33 @@ button, .btn {
   border-radius: 6px;
   padding: 16px;
   margin-bottom: 12px;
+}
+
+/* Tight per-row list (e.g. Albums tab) — many thin rows in one bordered
+   container, instead of one .card per row */
+#row-list {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.album-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.album-row:hover { background: #f7f7f7; }
+#row-list > .album-row:last-child { border-bottom: none; }
+
+.album-row-panel {
+  padding: 10px 12px;
+  background: #fafafa;
+  border-bottom: 1px solid #eee;
 }
 
 .card-header {
