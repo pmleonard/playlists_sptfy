@@ -1,6 +1,8 @@
 import { api, showToast, showConfirm } from "/static/app.js";
+import { getPageSize, paginate, paginationBarHtml, bindPaginationBar } from "/static/pagination.js";
 
 const BASE = "/api/ignore-duplicates";
+let pageState = { page: 1, pageSize: getPageSize("ignore_duplicates") };
 
 export async function render(container) {
   container.innerHTML = `<p class="loading">Loading…</p>`;
@@ -11,6 +13,7 @@ export async function render(container) {
     container.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
     return;
   }
+  pageState = { page: 1, pageSize: getPageSize("ignore_duplicates") };
   draw(container, data);
 }
 
@@ -20,7 +23,10 @@ function draw(container, data) {
     <div class="card">
       <div class="card-header">
         <strong>Ignored Duplicates (${keys.length} entries)</strong>
-        <button class="btn btn-primary btn-sm" id="btn-new">+ New Entry</button>
+        <div class="flex-row" style="gap:8px">
+          <button class="btn btn-secondary btn-sm" id="btn-cleanup">Clean-up</button>
+          <button class="btn btn-primary btn-sm" id="btn-new">+ New Entry</button>
+        </div>
       </div>
       <div id="new-form" style="display:none" class="inline-panel mb-12">
         <div class="form-group"><label>Key (song title)</label><input type="text" id="new-key"></div>
@@ -31,24 +37,49 @@ function draw(container, data) {
           <button class="btn btn-secondary btn-sm" id="btn-new-cancel">Cancel</button>
         </div>
       </div>
+      <div id="pagination-bar"></div>
       <ul class="file-list" id="entry-list"></ul>
     </div>`;
 
   renderList(container, data);
   setupNewForm(container, data);
+
+  container.querySelector("#btn-cleanup").onclick = () => handleCleanup(container);
+}
+
+async function handleCleanup(container) {
+  const ok = await showConfirm(
+    "Clean up Ignored Duplicates? This removes song links that no longer exist and any group left with only one song."
+  );
+  if (!ok) return;
+  try {
+    const result = await api("POST", `${BASE}/cleanup`);
+    showToast(`Removed ${result.removed_links} stale link(s), ${result.removed_groups} empty group(s)`);
+    render(container);
+  } catch (err) {
+    showToast(err.message, "error");
+  }
 }
 
 function renderList(container, data) {
   const list = container.querySelector("#entry-list");
   const keys = Object.keys(data);
+
+  const { slice, page } = paginate(keys, pageState.page, pageState.pageSize);
+  pageState.page = page;
+
   list.innerHTML = keys.length
-    ? keys.map((k) => `
+    ? slice.map((k) => `
       <li data-key="${escHtml(k)}">
         <span class="file-name">${escHtml(k)} <small style="color:#888">(${data[k].length} songs)</small></span>
         <button class="btn btn-secondary btn-sm" data-action="edit" data-key="${escHtml(k)}">View</button>
         <button class="btn btn-danger btn-sm" data-action="delete" data-key="${escHtml(k)}">Delete</button>
       </li>`).join("")
     : `<li style="color:#888">No entries.</li>`;
+
+  const pagBar = container.querySelector("#pagination-bar");
+  pagBar.innerHTML = paginationBarHtml(pageState, keys.length);
+  bindPaginationBar(pagBar, "ignore_duplicates", pageState, () => renderList(container, data));
 
   list.querySelectorAll("[data-action]").forEach((btn) => {
     btn.onclick = () => handleAction(btn.dataset.action, btn.dataset.key, data, container, btn);

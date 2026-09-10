@@ -1,8 +1,10 @@
 import { api, showToast } from "/static/app.js";
+import { getPageSize, paginate, paginationBarHtml, bindPaginationBar } from "/static/pagination.js";
 
 let rows = [];
 let filters = { minTracks: "", artist: "", album: "" };
 let openIndex = null;
+let pageState = { page: 1, pageSize: getPageSize("albums") };
 
 export async function render(container) {
   container.innerHTML = `<p class="loading">Loading…</p>`;
@@ -14,6 +16,7 @@ export async function render(container) {
   }
   filters = { minTracks: "", artist: "", album: "" };
   openIndex = null;
+  pageState = { page: 1, pageSize: getPageSize("albums") };
   draw(container);
 }
 
@@ -46,6 +49,7 @@ function draw(container) {
         <span id="filter-status" style="color:#888;margin-left:auto"></span>
       </div>
     </div>
+    <div id="pagination-bar"></div>
     <div id="row-list"></div>`;
 
   const artistInput = container.querySelector("#filter-artist");
@@ -58,16 +62,19 @@ function draw(container) {
   artistInput.addEventListener("input", () => {
     filters.artist = artistInput.value.toLowerCase();
     openIndex = null;
+    pageState.page = 1;
     renderList(container);
   });
   albumInput.addEventListener("input", () => {
     filters.album = albumInput.value.toLowerCase();
     openIndex = null;
+    pageState.page = 1;
     renderList(container);
   });
   minTracksSelect.addEventListener("change", () => {
     filters.minTracks = minTracksSelect.value;
     openIndex = null;
+    pageState.page = 1;
     renderList(container);
   });
 
@@ -81,13 +88,20 @@ function renderList(container) {
     .filter(({ r }) => !filters.artist || r.artist.toLowerCase().includes(filters.artist))
     .filter(({ r }) => !filters.album || r.album.toLowerCase().includes(filters.album));
 
+  const { slice, page } = paginate(filtered, pageState.page, pageState.pageSize);
+  pageState.page = page;
+
   const list = container.querySelector("#row-list");
-  list.innerHTML = filtered.length
-    ? filtered.map(({ r, i }) => rowHtml(r, i)).join("")
+  list.innerHTML = slice.length
+    ? slice.map(({ r, i }) => rowHtml(r, i)).join("")
     : `<p style="color:#888;padding:16px">No albums match the current filters.</p>`;
 
+  const pagBar = container.querySelector("#pagination-bar");
+  pagBar.innerHTML = paginationBarHtml(pageState, filtered.length);
+  bindPaginationBar(pagBar, "albums", pageState, () => renderList(container));
+
   container.querySelector("#filter-status").textContent =
-    `Showing ${filtered.length} of ${rows.length}`;
+    `Showing ${slice.length} of ${filtered.length} (${rows.length} total)`;
 
   list.querySelectorAll(".album-row").forEach((row) => {
     row.addEventListener("click", () => {

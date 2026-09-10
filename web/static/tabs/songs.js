@@ -1,15 +1,25 @@
 import { api, showToast, showConfirm } from "/static/app.js";
+import { getPageSize, paginate, paginationBarHtml, bindPaginationBar } from "/static/pagination.js";
 
 let allSongs = [];
+let genreTags = new Set();
+let eraTags = new Set();
 let activeTags = new Set();
 let columnFilters = {};
 let sortCol = null;
 let sortDir = 1;
+let pageState = { page: 1, pageSize: getPageSize("songs") };
 
 export async function render(container) {
   container.innerHTML = `<p class="loading">Loading songs…</p>`;
   try {
-    allSongs = await api("GET", "/api/songs/");
+    const [songs, tagGroups] = await Promise.all([
+      api("GET", "/api/songs/"),
+      api("GET", "/api/tag-groups/"),
+    ]);
+    allSongs = songs;
+    genreTags = new Set(tagGroups.genre_tags);
+    eraTags = new Set(tagGroups.era_tags);
   } catch (err) {
     container.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
     return;
@@ -18,17 +28,27 @@ export async function render(container) {
   columnFilters = {};
   sortCol = null;
   sortDir = 1;
+  pageState = { page: 1, pageSize: getPageSize("songs") };
   drawShell(container);
   renderTable(container);
 }
 
 function drawShell(container) {
-  const tags = collectTags(allSongs);
+  const { genre, era, other } = groupTags(allSongs, genreTags, eraTags);
+  const row1 = [
+    ...genre.map(tagBtnHtml),
+    ...(genre.length && era.length ? [`<span class="tag-sep"></span>`] : []),
+    ...era.map(tagBtnHtml),
+  ];
+  const row2 = other.map(tagBtnHtml);
+
   container.innerHTML = `
-    <div class="tag-filters" id="tag-filters">
-      ${tags.map((t) => `<button class="tag-btn" data-tag="${t}">${t}</button>`).join("")}
+    <div id="tag-filters">
+      ${row1.length ? `<div class="tag-filters">${row1.join("")}</div>` : ""}
+      ${row2.length ? `<div class="tag-filters">${row2.join("")}</div>` : ""}
     </div>
     <div class="status-bar" id="status"></div>
+    <div id="pagination-bar"></div>
     <div style="overflow-x:auto">
       <table id="songs-table">
         <thead>
@@ -64,12 +84,14 @@ function drawShell(container) {
     if (activeTags.has(tag)) activeTags.delete(tag);
     else activeTags.add(tag);
     btn.classList.toggle("active", activeTags.has(tag));
+    pageState.page = 1;
     renderTable(container);
   });
 
   container.querySelectorAll(".filter-row input").forEach((inp) => {
     inp.addEventListener("input", () => {
       columnFilters[inp.dataset.col] = inp.value.toLowerCase();
+      pageState.page = 1;
       renderTable(container);
     });
   });
@@ -90,6 +112,7 @@ function drawShell(container) {
         h.classList.add(sortDir === 1 ? "sort-asc" : "sort-desc");
       }
     });
+    pageState.page = 1;
     renderTable(container);
   });
 
@@ -131,8 +154,11 @@ function renderTable(container) {
     });
   }
 
+  const { slice, page } = paginate(indexed, pageState.page, pageState.pageSize);
+  pageState.page = page;
+
   const tbody = container.querySelector("#songs-body");
-  tbody.innerHTML = indexed.map(({ s, i }) => `
+  tbody.innerHTML = slice.map(({ s, i }) => `
     <tr data-idx="${i}">
       <td title="${escHtml(s.artist || "")}">${escHtml(s.artist || "")}</td>
       <td title="${escHtml(s.album || "")}">${escHtml(s.album || "")}</td>
@@ -147,8 +173,31 @@ function renderTable(container) {
       </td>
     </tr>`).join("");
 
+  const pagBar = container.querySelector("#pagination-bar");
+  pagBar.innerHTML = paginationBarHtml(pageState, indexed.length);
+  bindPaginationBar(pagBar, "songs", pageState, () => renderTable(container));
+
   container.querySelector("#status").textContent =
-    `Showing ${indexed.length} of ${allSongs.length} songs`;
+    `Showing ${slice.length} of ${indexed.length} songs (${allSongs.length} total)`;
+}
+
+function groupTags(songs, genreSet, eraSet) {
+  const counts = new Map();
+  for (const s of songs) {
+    (s.tags || "").split(",").map((t) => t.trim()).filter(Boolean)
+      .forEach((t) => counts.set(t, (counts.get(t) || 0) + 1));
+  }
+  const present = [...counts.keys()];
+  const byCountDesc = (a, b) => counts.get(b) - counts.get(a) || a.localeCompare(b);
+
+  const genre = present.filter((t) => genreSet.has(t)).sort(byCountDesc);
+  const era = present.filter((t) => eraSet.has(t)).sort((a, b) => a.localeCompare(b));
+  const other = present.filter((t) => !genreSet.has(t) && !eraSet.has(t)).sort(byCountDesc);
+  return { genre, era, other };
+}
+
+function tagBtnHtml(t) {
+  return `<button class="tag-btn ${activeTags.has(t) ? "active" : ""}" data-tag="${t}">${escHtml(t)}</button>`;
 }
 
 async function openEditPanel(container, idx) {
@@ -283,14 +332,6 @@ async function deleteSong(container, idx) {
     showToast("Song deleted");
     render(container);
   } catch (err) { showToast(err.message, "error"); }
-}
-
-function collectTags(songs) {
-  const set = new Set();
-  for (const s of songs) {
-    if (s.tags) s.tags.split(",").forEach((t) => set.add(t.trim()));
-  }
-  return [...set].sort();
 }
 
 function fmtDuration(secs) {

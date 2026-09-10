@@ -1,8 +1,10 @@
+from analysis import tags_to_set
 from file_utils import read_json, write_json
 from flask import Blueprint, jsonify, request
 
 bp = Blueprint("possible_duplicates", __name__, url_prefix="/api/possible-duplicates")
 FILE = "song_lists/possible_duplicates.json"
+SONGS_FILE = "song_lists/songs.json"
 
 
 @bp.get("/")
@@ -37,6 +39,35 @@ def update(key):
     data[key] = songs
     write_json(FILE, data)
     return jsonify({"ok": True})
+
+
+@bp.post("/<path:key>/merge-tags")
+def merge_tags(key):
+    dup_data = read_json(FILE)
+    if key not in dup_data:
+        return jsonify({"error": "Key not found"}), 404
+
+    links = {s.get("link") for s in dup_data[key] if s.get("link")}
+    songs = read_json(SONGS_FILE)
+
+    merged: set[str] = set()
+    for s in songs:
+        if s.get("link") in links:
+            merged |= tags_to_set(s.get("tags", ""))
+    merged_str = ", ".join(sorted(merged))
+
+    changed = 0
+    for s in songs:
+        if s.get("link") in links and tags_to_set(s.get("tags", "")) != merged:
+            s["tags"] = merged_str
+            changed += 1
+    write_json(SONGS_FILE, songs)
+
+    for s in dup_data[key]:
+        s["tags"] = merged_str
+    write_json(FILE, dup_data)
+
+    return jsonify({"ok": True, "changed": changed})
 
 
 IGNORE_FILE = "song_lists/ignore_duplicates.json"
@@ -76,9 +107,9 @@ def delete_song(key, song_idx):
     write_json(FILE, dup_data)
 
     if removed_link:
-        song_data = read_json("song_lists/songs.json")
+        song_data = read_json(SONGS_FILE)
         song_data = [s for s in song_data if s.get("link") != removed_link]
-        write_json("song_lists/songs.json", song_data)
+        write_json(SONGS_FILE, song_data)
 
     return jsonify({"ok": True, "entry_deleted": entry_deleted})
 
