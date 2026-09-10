@@ -1,7 +1,9 @@
 import { api, showToast, showConfirm } from "/static/app.js";
+import { getPageSize, paginate, paginationBarHtml, bindPaginationBar } from "/static/pagination.js";
 
 let clusters = [];
 let filters = { multiOnly: false, gapsCount: "", minTracks: "" }; // "" = All / no minimum
+let pageState = { page: 1, pageSize: getPageSize("album_dups") };
 
 function unionTracks(c) {
   return [...new Set(c.variants.flatMap((v) => v.tracks))].sort((a, b) => a - b);
@@ -16,6 +18,7 @@ export async function render(container) {
     return;
   }
   filters = { multiOnly: false, gapsCount: "", minTracks: "" };
+  pageState = { page: 1, pageSize: getPageSize("album_dups") };
   draw(container);
 }
 
@@ -52,6 +55,7 @@ function draw(container) {
         <span id="filter-status" style="color:#888;margin-left:auto"></span>
       </div>
     </div>
+    <div id="pagination-bar"></div>
     <div id="cluster-list"></div>`;
 
   const multiCb = container.querySelector("#filter-multi");
@@ -63,14 +67,17 @@ function draw(container) {
 
   multiCb.addEventListener("change", () => {
     filters.multiOnly = multiCb.checked;
+    pageState.page = 1;
     renderList(container);
   });
   gapsSelect.addEventListener("change", () => {
     filters.gapsCount = gapsSelect.value;
+    pageState.page = 1;
     renderList(container);
   });
   minTracksSelect.addEventListener("change", () => {
     filters.minTracks = minTracksSelect.value;
+    pageState.page = 1;
     renderList(container);
   });
 
@@ -85,13 +92,20 @@ function renderList(container) {
     return true;
   });
 
+  const { slice, page } = paginate(filtered, pageState.page, pageState.pageSize);
+  pageState.page = page;
+
   const list = container.querySelector("#cluster-list");
-  list.innerHTML = filtered.length
-    ? filtered.map((c) => clusterHtml(c, clusters.indexOf(c))).join("")
+  list.innerHTML = slice.length
+    ? slice.map((c) => clusterHtml(c, clusters.indexOf(c))).join("")
     : `<p style="color:#888">No albums match the current filters.</p>`;
 
+  const pagBar = container.querySelector("#pagination-bar");
+  pagBar.innerHTML = paginationBarHtml(pageState, filtered.length);
+  bindPaginationBar(pagBar, "album_dups", pageState, () => renderList(container));
+
   container.querySelector("#filter-status").textContent =
-    `Showing ${filtered.length} of ${clusters.length}`;
+    `Showing ${slice.length} of ${filtered.length} (${clusters.length} total)`;
 
   list.querySelectorAll("[data-action='merge']").forEach((btn) => {
     btn.addEventListener("click", () => handleMerge(container, btn));

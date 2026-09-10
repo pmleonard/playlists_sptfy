@@ -58,7 +58,7 @@ function draw(container) {
       <div class="tag-filters" id="tag-filters">
         ${GENRE_TAGS.map(
           (t) =>
-            `<button class="tag-btn ${activeTags.has(t) ? "active" : ""}" data-tag="${t}">${t}</button>`
+            `<button class="tag-btn ${activeTags.has(t) ? "active" : "tag-btn--muted"}" data-tag="${t}">${t}</button>`
         ).join("")}
       </div>
     </div>

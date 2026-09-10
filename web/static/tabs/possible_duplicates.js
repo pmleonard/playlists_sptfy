@@ -1,6 +1,8 @@
-import { api, showToast } from "/static/app.js";
+import { api, showToast, showConfirm } from "/static/app.js";
+import { getPageSize, paginate, paginationBarHtml, bindPaginationBar } from "/static/pagination.js";
 
 const BASE = "/api/possible-duplicates";
+let pageState = { page: 1, pageSize: getPageSize("possible_duplicates") };
 
 export async function render(container) {
   container.innerHTML = `<p class="loading">Loading…</p>`;
@@ -11,6 +13,7 @@ export async function render(container) {
     container.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
     return;
   }
+  pageState = { page: 1, pageSize: getPageSize("possible_duplicates") };
   draw(container, data);
 }
 
@@ -21,6 +24,7 @@ function draw(container, data) {
       <div class="card-header">
         <strong>Possible Duplicates (${keys.length} entries)</strong>
       </div>
+      <div id="pagination-bar"></div>
       <ul class="file-list" id="entry-list"></ul>
     </div>`;
 
@@ -30,22 +34,49 @@ function draw(container, data) {
 function renderList(container, data) {
   const list = container.querySelector("#entry-list");
   const keys = Object.keys(data);
+
+  const { slice, page } = paginate(keys, pageState.page, pageState.pageSize);
+  pageState.page = page;
+
   list.innerHTML = keys.length
-    ? keys.map((k) => `
+    ? slice.map((k) => `
       <li data-key="${escHtml(k)}">
         <span class="file-name">${escHtml(k)} <small style="color:#888">(${data[k].length} songs)</small></span>
         <button class="btn btn-secondary btn-sm" data-action="view" data-key="${escHtml(k)}">View</button>
+        <button class="btn btn-secondary btn-sm" data-action="merge-tags" data-key="${escHtml(k)}">Merge Tags</button>
         <button class="btn btn-secondary btn-sm" data-action="move" data-key="${escHtml(k)}">Move to Ignored</button>
       </li>`).join("")
     : `<li style="color:#888">No entries.</li>`;
+
+  const pagBar = container.querySelector("#pagination-bar");
+  pagBar.innerHTML = paginationBarHtml(pageState, keys.length);
+  bindPaginationBar(pagBar, "possible_duplicates", pageState, () => renderList(container, data));
 
   list.querySelectorAll("[data-action='view']").forEach((btn) => {
     btn.onclick = () => handleView(btn.dataset.key, data, container, btn);
   });
 
+  list.querySelectorAll("[data-action='merge-tags']").forEach((btn) => {
+    btn.onclick = () => handleMergeTags(btn.dataset.key, container, btn);
+  });
+
   list.querySelectorAll("[data-action='move']").forEach((btn) => {
     btn.onclick = () => moveToIgnored(btn.dataset.key, container, btn);
   });
+}
+
+async function handleMergeTags(key, container, btn) {
+  const ok = await showConfirm(`Merge tags across all songs in "${key}"?`);
+  if (!ok) return;
+  btn.disabled = true;
+  try {
+    const result = await api("POST", `${BASE}/${encodeURIComponent(key)}/merge-tags`);
+    showToast(`Tags merged (${result.changed} song(s) updated)`);
+    render(container);
+  } catch (err) {
+    showToast(err.message, "error");
+    btn.disabled = false;
+  }
 }
 
 function closeInlinePanel(list) {

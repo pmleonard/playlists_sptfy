@@ -1,4 +1,7 @@
 import { api, showToast, showConfirm } from "/static/app.js";
+import { getPageSize, paginate, paginationBarHtml, bindPaginationBar } from "/static/pagination.js";
+
+let pageState = { page: 1, pageSize: getPageSize("grouped_songs") };
 
 export async function render(container) {
   container.innerHTML = `<p class="loading">Loading…</p>`;
@@ -9,6 +12,7 @@ export async function render(container) {
     container.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
     return;
   }
+  pageState = { page: 1, pageSize: getPageSize("grouped_songs") };
   draw(container, groups);
 }
 
@@ -26,6 +30,7 @@ function draw(container, groups) {
           <button class="btn btn-secondary btn-sm" id="btn-new-cancel">Cancel</button>
         </div>
       </div>
+      <div id="pagination-bar"></div>
       <ul class="file-list" id="group-list"></ul>
     </div>`;
 
@@ -55,8 +60,11 @@ function renderList(container, groups) {
     if (ac !== bc) return ac < bc ? -1 : 1;
     return a.group_name.toLowerCase().localeCompare(b.group_name.toLowerCase());
   });
+  const { slice, page } = paginate(sorted, pageState.page, pageState.pageSize);
+  pageState.page = page;
+
   list.innerHTML = groups.length
-    ? sorted.map((g) => {
+    ? slice.map((g) => {
         const i = groups.indexOf(g);
         return `
       <li data-index="${i}">
@@ -66,6 +74,10 @@ function renderList(container, groups) {
       </li>`;
       }).join("")
     : `<li style="color:#888">No groups.</li>`;
+
+  const pagBar = container.querySelector("#pagination-bar");
+  pagBar.innerHTML = paginationBarHtml(pageState, groups.length);
+  bindPaginationBar(pagBar, "grouped_songs", pageState, () => renderList(container, groups));
 
   list.querySelectorAll("[data-action]").forEach((btn) => {
     btn.onclick = () => handleAction(btn.dataset.action, parseInt(btn.dataset.index), groups, container, btn);

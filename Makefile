@@ -43,6 +43,7 @@ bootstrap-force:
 
 setup-dev:
 	python -m pip install -e .
+	python -m pip install -r web/requirements.txt
 	python -m pip install 'pre-commit>=3.7' 'pytest>=8.0' 'ruff>=0.5'
 	pre-commit install
 

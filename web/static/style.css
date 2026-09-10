@@ -116,6 +116,12 @@ button, .btn {
 .btn-danger:hover { background: #c62828; }
 .btn-sm { padding: 3px 8px; font-size: 12px; }
 
+.btn:disabled {
+  background: #e0e0e0;
+  color: #888;
+  cursor: default;
+}
+
 /* Tag buttons */
 .tag-filters {
   display: flex;
@@ -343,3 +349,38 @@ li.inline-item-panel .inline-panel {
 th[data-sort] { cursor: pointer; user-select: none; }
 th.sort-asc::after  { content: " ▲"; font-size: 10px; }
 th.sort-desc::after { content: " ▼"; font-size: 10px; }
+
+/* Pagination */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+.pagination-bar select {
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+.pagination-bar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Tag group separator (Songs tab filter groups) */
+.tag-sep {
+  width: 1px;
+  align-self: stretch;
+  background: #ddd;
+  margin: 0 4px;
+}
+
+/* Muted (inactive) tag button — Genres & Eras tabs only */
+.tag-btn--muted:not(.active) {
+  background: #e0e0e0;
+  color: #555;
+  border-color: #ccc;
+}

@@ -10,6 +10,7 @@ from routes.import_routes import bp as import_bp
 from routes.possible_duplicates_routes import bp as possible_duplicates_bp
 from routes.settings_routes import bp as settings_bp
 from routes.songs_routes import bp as songs_bp
+from routes.tag_groups_routes import bp as tag_groups_bp
 from routes.tag_review_routes import bp as tag_review_bp
 from routes.update_routes import bp as update_bp
 
@@ -28,6 +29,7 @@ app.register_blueprint(tag_review_bp)
 app.register_blueprint(album_review_bp)
 app.register_blueprint(albums_bp)
 app.register_blueprint(genre_review_bp)
+app.register_blueprint(tag_groups_bp)
 
 
 @app.get("/")
