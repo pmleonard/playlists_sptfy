@@ -245,3 +245,135 @@ def test_cleanup_no_op_on_clean_data(client, data_root):
 
     entries = _read(data_root, "song_lists/ignore_duplicates.json")
     assert {s["link"] for s in entries["Some Song"]} == {"l1", "l2"}
+
+
+# --- Songs: add-tag (spec 008, US-4) ---------------------------------------
+
+
+def test_add_tag_preserves_existing_tags(client, data_root):
+    _write(data_root, "song_lists/songs.json", [_song("l1", tags="rock, 70s")])
+
+    resp = client.patch("/api/songs/0/tags", json={"tag": "roadtrip"})
+    assert resp.status_code == 200
+    assert resp.get_json() == {"ok": True}
+
+    songs = _read(data_root, "song_lists/songs.json")
+    assert songs[0]["tags"] == "70s, roadtrip, rock"
+
+
+def test_add_tag_rejects_genre_tag(client, data_root):
+    _write(data_root, "song_lists/songs.json", [_song("l1", tags="")])
+
+    resp = client.patch("/api/songs/0/tags", json={"tag": "rock"})
+    assert resp.status_code == 400
+
+    songs = _read(data_root, "song_lists/songs.json")
+    assert songs[0]["tags"] == ""
+
+
+def test_add_tag_rejects_era_tag(client, data_root):
+    _write(data_root, "song_lists/songs.json", [_song("l1", tags="")])
+
+    resp = client.patch("/api/songs/0/tags", json={"tag": "80s"})
+    assert resp.status_code == 400
+
+    songs = _read(data_root, "song_lists/songs.json")
+    assert songs[0]["tags"] == ""
+
+
+def test_add_tag_404_on_out_of_range_index(client, data_root):
+    _write(data_root, "song_lists/songs.json", [_song("l1")])
+
+    resp = client.patch("/api/songs/5/tags", json={"tag": "roadtrip"})
+    assert resp.status_code == 404
+
+
+def test_add_tag_requires_tag_in_body(client, data_root):
+    _write(data_root, "song_lists/songs.json", [_song("l1")])
+
+    resp = client.patch("/api/songs/0/tags", json={})
+    assert resp.status_code == 400
+
+
+# --- Import / Export: per-file row counts ----------------------------------
+
+
+def _write_txt(data_root: Path, rel_path: str, content: str) -> None:
+    path = data_root / rel_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def test_import_list_includes_line_counts(client, data_root):
+    _write_txt(data_root, "songs_import/one.txt", "url-a\nurl-b\n\nurl-c\n")
+    _write_txt(data_root, "songs_import/empty.txt", "")
+
+    resp = client.get("/api/import/")
+    assert resp.status_code == 200
+    by_name = {row["name"]: row["count"] for row in resp.get_json()}
+    assert by_name == {"one": 3, "empty": 0}
+
+
+def test_export_list_includes_line_counts(client, data_root):
+    _write_txt(data_root, "playlist_export/playlist.txt", "url-a\nurl-b\n")
+
+    resp = client.get("/api/export/")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body == [{"name": "playlist", "count": 2}]
+
+
+# --- Grouped songs: "grouped" tag applied on save ---------------------------
+
+
+def test_create_group_tags_its_songs_as_grouped(client, data_root):
+    _write(data_root, "song_lists/grouped_songs.json", [])
+    _write(
+        data_root,
+        "song_lists/songs.json",
+        [_song("l1", tags="70s, rock"), _song("l2", tags="")],
+    )
+
+    resp = client.post(
+        "/api/grouped-songs/",
+        json={"artist": "Artist", "group_name": "Group", "songs": ["l1", "l2"]},
+    )
+    assert resp.status_code == 201
+
+    songs = _read(data_root, "song_lists/songs.json")
+    assert songs[0]["tags"] == "70s, grouped, rock"
+    assert songs[1]["tags"] == "grouped"
+
+
+def test_create_group_does_not_tag_unrelated_songs(client, data_root):
+    _write(data_root, "song_lists/grouped_songs.json", [])
+    _write(data_root, "song_lists/songs.json", [_song("l1", tags="")])
+
+    resp = client.post(
+        "/api/grouped-songs/",
+        json={"artist": "Artist", "group_name": "Group", "songs": ["other-link"]},
+    )
+    assert resp.status_code == 201
+
+    songs = _read(data_root, "song_lists/songs.json")
+    assert songs[0]["tags"] == ""
+
+
+def test_update_group_tags_newly_added_song(client, data_root):
+    group = {"artist": "Artist", "group_name": "Group", "songs": ["l1"]}
+    _write(data_root, "song_lists/grouped_songs.json", [group])
+    _write(
+        data_root,
+        "song_lists/songs.json",
+        [_song("l1", tags="grouped"), _song("l2", tags="")],
+    )
+
+    resp = client.put(
+        "/api/grouped-songs/0",
+        json={"artist": "Artist", "group_name": "Group", "songs": ["l1", "l2"]},
+    )
+    assert resp.status_code == 200
+
+    songs = _read(data_root, "song_lists/songs.json")
+    assert songs[0]["tags"] == "grouped"
+    assert songs[1]["tags"] == "grouped"

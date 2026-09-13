@@ -25,6 +25,7 @@ merge_tags = main_module.merge_tags
 normalize_tags = main_module.normalize_tags
 open_json_file = main_module.open_json_file
 remove_duplicates = main_module.remove_duplicates
+sort_songs = main_module.sort_songs
 tag_filter_songs = main_module.tag_filter_songs
 validate_song_rows = main_module.validate_song_rows
 write_duplicates_markdown = main_module.write_duplicates_markdown
@@ -275,6 +276,39 @@ def test_remove_duplicates_keeps_distinct_variant_tags() -> None:
     result = remove_duplicates(songs)
     assert len(result) == 1
     assert result[0]["tags"] == "varianta, variantf"
+
+
+def test_sort_songs_orders_by_artist_album_track() -> None:
+    def _entry(artist, album, track):
+        song = _song(f"{artist}-{album}-{track}", artist, "Title", "")
+        song["album"] = album
+        song["track"] = track
+        return song
+
+    songs = [
+        _entry("Bravo", "Album", 1),
+        _entry("Alpha", "Beta Album", 2),
+        _entry("Alpha", "Alpha Album", 5),
+        _entry("Alpha", "Alpha Album", 1),
+    ]
+    result = sort_songs(songs)
+    assert [s["link"] for s in result] == [
+        "Alpha-Alpha Album-1",
+        "Alpha-Alpha Album-5",
+        "Alpha-Beta Album-2",
+        "Bravo-Album-1",
+    ]
+
+
+def test_sort_songs_is_case_insensitive_and_tolerates_non_numeric_track() -> None:
+    songs = [
+        _song("url-a", "artist", "Title", ""),
+        _song("url-b", "Artist", "Title", ""),
+    ]
+    songs[0]["track"] = "not-a-number"
+    songs[1]["track"] = "2"
+    result = sort_songs(songs)
+    assert [s["link"] for s in result] == ["url-a", "url-b"]
 
 
 def test_write_duplicates_markdown_structure() -> None:
@@ -806,6 +840,71 @@ def test_load_settings_raises_for_invalid_playlist_export_random_type(
         main_module.load_settings()
 
 
+def test_load_settings_raises_for_invalid_playlist_export_use_grouped_songs_type(
+    tmp_path: Path, monkeypatch
+) -> None:
+    settings_path = tmp_path / "settings.json"
+    config_path = tmp_path / "config.json"
+    default_settings_path = tmp_path / "default_settings.json"
+
+    settings_path.write_text(
+        json.dumps(
+            {
+                "settings_version": 1,
+                "metadata_enabled": False,
+                "strict_mode": False,
+                "dry_run": False,
+                "log_level": "INFO",
+                "max_ctr": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    config_path.write_text(
+        json.dumps(
+            {
+                "song_list_path": "data/song_lists/songs.json",
+                "duplicates_path": "data/song_lists/duplicates.json",
+                "duplicates_report_path": "data/song_lists/duplicates.md",
+                "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
+                "songs_csv_path": "data/song_lists/songs.csv",
+                "run_summary_path": "data/song_lists/run_summary.json",
+                "playlist_export_path": "data/playlist_export",
+                "grouped_songs_path": "data/song_lists/grouped_songs.json",
+                "playlist_exports": [
+                    {
+                        "filename": "songs.txt",
+                        "use_grouped_songs": "false",
+                        "tags_filter": {"include": [], "exclude": []},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    default_settings_path.write_text(
+        json.dumps(
+            {
+                "settings_version": 1,
+                "metadata_enabled": False,
+                "strict_mode": False,
+                "dry_run": False,
+                "log_level": "INFO",
+                "max_ctr": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(main_module, "SETTINGS_PATH", settings_path)
+    monkeypatch.setattr(main_module, "CONFIG_PATH", config_path)
+    monkeypatch.setattr(main_module, "DEFAULT_SETTINGS_PATH", default_settings_path)
+    monkeypatch.setattr(main_module, "DEFAULT_CONFIG_PATH", tmp_path / "default_config.json")
+
+    with pytest.raises(ValueError, match=r"playlist_exports\[0\]\.use_grouped_songs"):
+        main_module.load_settings()
+
+
 def test_main_orchestration_uses_filtered_grouped_songs_for_playlist_export(monkeypatch) -> None:
     songs = [
         _song("url-a", "Artist", "A", "featured"),
@@ -866,10 +965,77 @@ def test_main_orchestration_uses_filtered_grouped_songs_for_playlist_export(monk
 
     main_module.main()
 
-    # CSV export remains the full catalog; playlist export uses filtered + grouped order.
-    assert captured["csv"] == ["url-a", "url-b", "url-c"]
+    # CSV export remains the full catalog, sorted by artist/album/track;
+    # playlist export uses filtered + grouped order.
+    assert captured["csv"] == ["url-b", "url-a", "url-c"]
     assert captured["playlist"] == ["url-b", "url-a"]
     assert isinstance(captured["dups"], dict)
+
+
+def test_main_orchestration_skips_grouping_when_use_grouped_songs_is_false(monkeypatch) -> None:
+    songs = [
+        _song("url-a", "Artist", "A", "featured"),
+        _song("url-b", "", "B", "featured"),
+        _song("url-c", "Artist", "C", "blocked"),
+    ]
+    captured: dict[str, Any] = {"csv": None, "playlist": None, "dups": None}
+
+    monkeypatch.setattr(
+        main_module,
+        "load_settings",
+        lambda: {
+            "song_list_path": "data/song_lists/songs.json",
+            "duplicates_path": "data/song_lists/possible_duplicates.json",
+            "duplicates_report_path": "data/song_lists/possible_duplicates.md",
+            "songs_csv_path": "data/song_lists/songs.csv",
+            "run_summary_path": "data/song_lists/run_summary.json",
+            "playlist_export_path": "data/playlist_export",
+            "grouped_songs_path": "data/song_lists/grouped_songs.json",
+            "ignore_duplicates_path": "data/song_lists/ignore_duplicates.json",
+            "metadata_enabled": True,
+            "strict_mode": False,
+            "dry_run": False,
+            "log_level": "INFO",
+            "playlist_exports": [
+                {
+                    "filename": "playlist.txt",
+                    "tags_filter": {"include": ["featured"], "exclude": ["blocked"]},
+                    "use_grouped_songs": False,
+                }
+            ],
+            "max_ctr": 0,
+        },
+    )
+    # Use copy-per-song so main() mutations do not leak back into test fixtures.
+    monkeypatch.setattr(main_module, "open_json_file", lambda _path: [dict(song) for song in songs])
+    monkeypatch.setattr(main_module, "load_songs_from_tag_files", lambda _path: [])
+    monkeypatch.setattr(main_module, "process_songs", lambda in_songs, _max: in_songs)
+    # If grouping ran, this would reorder to [url-b, url-a] — it must not be applied.
+    monkeypatch.setattr(main_module, "load_grouped_songs", lambda _path: [["url-b", "url-a"]])
+    monkeypatch.setattr(
+        main_module,
+        "write_json_file",
+        lambda data, path: (
+            captured.__setitem__("dups", data) if "possible_duplicates" in str(path) else None
+        ),
+    )
+    monkeypatch.setattr(main_module, "write_duplicates_markdown", lambda _dups, _path: None)
+    # Freeze shuffle for deterministic assertions.
+    monkeypatch.setattr(main_module.random, "shuffle", lambda _songs: None)
+
+    def _capture_csv(data, _path):
+        captured["csv"] = [song["link"] for song in data]
+
+    def _capture_playlist(data, _path):
+        captured["playlist"] = [song["link"] for song in data]
+
+    monkeypatch.setattr(main_module, "write_songs_csv", _capture_csv)
+    monkeypatch.setattr(main_module, "write_song_links_txt", _capture_playlist)
+
+    main_module.main()
+
+    # Grouping skipped: playlist keeps filtered (unshuffled) order, not the grouped order.
+    assert captured["playlist"] == ["url-a", "url-b"]
 
 
 def test_main_orchestration_writes_multiple_playlist_exports(monkeypatch) -> None:
