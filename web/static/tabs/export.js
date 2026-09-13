@@ -15,11 +15,12 @@ export async function render(container) {
       <div class="card-header"><strong>Export Files</strong></div>
       <ul class="file-list">
         ${files.length
-          ? files.map((f) => `
+          ? files.map(({ name, count }) => `
             <li>
-              <span class="file-name">${f}</span>
-              <button class="btn btn-secondary btn-sm" data-action="view" data-name="${f}">View</button>
-              <button class="btn btn-primary btn-sm" data-action="copy" data-name="${f}">Copy All</button>
+              <span class="file-name">${name}</span>
+              <span class="file-count" style="color:#888;margin-left:6px">(${count})</span>
+              <button class="btn btn-secondary btn-sm" data-action="view" data-name="${name}">View</button>
+              <button class="btn btn-primary btn-sm" data-action="copy" data-name="${name}">Copy All</button>
             </li>`).join("")
           : `<li style="color:#888">No export files found.</li>`}
       </ul>

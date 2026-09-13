@@ -152,6 +152,8 @@ function renderTable(container) {
       }
       return String(av).localeCompare(String(bv)) * sortDir;
     });
+  } else {
+    indexed.sort((a, b) => defaultCompare(a.s, b.s));
   }
 
   const { slice, page } = paginate(indexed, pageState.page, pageState.pageSize);
@@ -168,6 +170,7 @@ function renderTable(container) {
       <td>${fmtDate(s.released)}</td>
       <td title="${escHtml(s.tags || "")}">${escHtml(s.tags || "")}</td>
       <td class="row-actions">
+        ${s.link ? `<a class="btn btn-secondary btn-sm" href="${escHtml(s.link)}" target="_blank" rel="noopener">Open ↗</a>` : ""}
         <button class="btn btn-secondary btn-sm" data-action="edit" data-idx="${i}">Edit</button>
         <button class="btn btn-danger btn-sm" data-action="delete" data-idx="${i}">Delete</button>
       </td>
@@ -179,6 +182,14 @@ function renderTable(container) {
 
   container.querySelector("#status").textContent =
     `Showing ${slice.length} of ${indexed.length} songs (${allSongs.length} total)`;
+}
+
+function defaultCompare(a, b) {
+  const artistCmp = String(a.artist ?? "").localeCompare(String(b.artist ?? ""));
+  if (artistCmp) return artistCmp;
+  const albumCmp = String(a.album ?? "").localeCompare(String(b.album ?? ""));
+  if (albumCmp) return albumCmp;
+  return (parseFloat(a.track) || 0) - (parseFloat(b.track) || 0);
 }
 
 function groupTags(songs, genreSet, eraSet) {

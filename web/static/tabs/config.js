@@ -37,6 +37,7 @@ function draw(container, config) {
             <tr style="color:#888">
               <th style="text-align:left;padding:4px 6px;font-weight:normal">Filename</th>
               <th style="text-align:center;padding:4px 6px;font-weight:normal">Random</th>
+              <th style="text-align:center;padding:4px 6px;font-weight:normal">Grouped Songs</th>
               <th style="text-align:left;padding:4px 6px;font-weight:normal">Include Tags</th>
               <th style="text-align:left;padding:4px 6px;font-weight:normal">Exclude Tags</th>
               <th></th>
@@ -80,6 +81,7 @@ function exportRow(ex) {
     <tr class="export-row">
       <td style="padding:4px 6px"><input class="ex-filename" type="text" value="${escHtml(ex.filename || "")}" style="width:100%"></td>
       <td style="padding:4px 6px;text-align:center"><input class="ex-random" type="checkbox" ${ex.random ? "checked" : ""}></td>
+      <td style="padding:4px 6px;text-align:center"><input class="ex-use-grouped-songs" type="checkbox" ${ex.use_grouped_songs !== false ? "checked" : ""}></td>
       <td style="padding:4px 6px"><input class="ex-include" type="text" value="${escHtml(inc)}" style="width:100%"></td>
       <td style="padding:4px 6px"><input class="ex-exclude" type="text" value="${escHtml(excl)}" style="width:100%"></td>
       <td style="padding:4px 6px"><button class="btn btn-danger btn-sm remove-export-btn">Remove</button></td>
@@ -96,6 +98,7 @@ function readExports(container) {
   return [...container.querySelectorAll(".export-row")].map((el) => ({
     filename: el.querySelector(".ex-filename").value.trim(),
     random: el.querySelector(".ex-random").checked,
+    use_grouped_songs: el.querySelector(".ex-use-grouped-songs").checked,
     tags_filter: {
       include: el.querySelector(".ex-include").value.split(",").map((t) => t.trim()).filter(Boolean),
       exclude: el.querySelector(".ex-exclude").value.split(",").map((t) => t.trim()).filter(Boolean),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-ERA_TAGS = {"50s", "60s", "70s", "80s", "90s", "2000s", "2010s"}
+ERA_TAGS = {"50s", "60s", "70s", "80s", "90s", "2000s", "2010s", "2020s"}
 
 ERA_DECADE_RANGES = {
     "50s": (1950, 1959),
@@ -12,6 +12,7 @@ ERA_DECADE_RANGES = {
     "90s": (1990, 1999),
     "2000s": (2000, 2009),
     "2010s": (2010, 2019),
+    "2020s": (2020, 2029),
 }
 
 REISSUE_KEYWORDS = (

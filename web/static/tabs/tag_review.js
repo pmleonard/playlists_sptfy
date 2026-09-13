@@ -1,6 +1,6 @@
 import { api, showConfirm, showToast } from "/static/app.js";
 
-const ERA_TAGS = ["50s", "60s", "70s", "80s", "90s", "2000s", "2010s"];
+const ERA_TAGS = ["50s", "60s", "70s", "80s", "90s", "2000s", "2010s", "2020s"];
 const CATEGORIES = [
   { key: "mismatch", label: "Mismatch" },
   { key: "missing", label: "Missing" },

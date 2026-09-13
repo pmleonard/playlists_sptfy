@@ -7,7 +7,13 @@ DIR = "songs_import"
 
 @bp.get("/")
 def list_files():
-    return jsonify(list_txt_files(DIR))
+    names = list_txt_files(DIR)
+    return jsonify([{"name": name, "count": _line_count(f"{DIR}/{name}.txt")} for name in names])
+
+
+def _line_count(rel_path: str) -> int:
+    content = read_txt(rel_path)
+    return sum(1 for line in content.splitlines() if line.strip())
 
 
 @bp.get("/<name>")

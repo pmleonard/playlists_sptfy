@@ -193,6 +193,10 @@ def validate_config(config: dict) -> dict:
             raise ValueError(f"Missing required playlist_exports[{i}].tags_filter")
         if "random" in export_cfg and not isinstance(export_cfg["random"], bool):
             raise ValueError(f"Invalid playlist_exports[{i}].random: expected bool")
+        if "use_grouped_songs" in export_cfg and not isinstance(
+            export_cfg["use_grouped_songs"], bool
+        ):
+            raise ValueError(f"Invalid playlist_exports[{i}].use_grouped_songs: expected bool")
         tags_filter = export_cfg["tags_filter"]
         if not isinstance(tags_filter, dict):
             raise ValueError(f"Invalid playlist_exports[{i}].tags_filter: expected object")

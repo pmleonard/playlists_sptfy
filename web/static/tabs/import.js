@@ -49,12 +49,13 @@ function draw(container, files) {
 
 function renderList(list, files, container) {
   list.innerHTML = files.length
-    ? files.map((f) => `
-      <li data-name="${f}">
-        <span class="file-name">${f}</span>
-        <button class="btn btn-secondary btn-sm" data-action="view" data-name="${f}">View</button>
-        <button class="btn btn-secondary btn-sm" data-action="edit" data-name="${f}">Edit</button>
-        <button class="btn btn-danger btn-sm" data-action="delete" data-name="${f}">Delete</button>
+    ? files.map(({ name, count }) => `
+      <li data-name="${name}">
+        <span class="file-name">${name}</span>
+        <span class="file-count" style="color:#888;margin-left:6px">(${count})</span>
+        <button class="btn btn-secondary btn-sm" data-action="view" data-name="${name}">View</button>
+        <button class="btn btn-secondary btn-sm" data-action="edit" data-name="${name}">Edit</button>
+        <button class="btn btn-danger btn-sm" data-action="delete" data-name="${name}">Delete</button>
       </li>`).join("")
     : `<li style="color:#888">No import files found.</li>`;
 

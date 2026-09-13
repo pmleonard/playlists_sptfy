@@ -137,11 +137,13 @@ def main():
         filename = export_cfg["filename"]
         export_filter = export_cfg["tags_filter"]
         export_random = export_cfg.get("random", True)
+        export_use_grouped_songs = export_cfg.get("use_grouped_songs", True)
         export_songs = tag_filter_songs(songs, export_filter)
         filtered_count = len(export_songs)
         if export_random:
             random.shuffle(export_songs)
-        export_songs = group_randomized_songs(export_songs, grouped_songs)
+        if export_use_grouped_songs:
+            export_songs = group_randomized_songs(export_songs, grouped_songs)
         grouped_count = len(export_songs)
         export_results.append(
             {
@@ -199,6 +201,7 @@ def main():
             )
         logger.info("Would write run summary JSON to %s", run_summary_path)
     else:
+        songs = sort_songs(songs)
         write_json_file(songs, song_list_path)
         # CSV is the canonical catalog export (unfiltered).
         write_songs_csv(songs, songs_csv_path)
@@ -209,6 +212,22 @@ def main():
         write_json_file(run_summary, run_summary_path)
 
     log_run_summary(run_summary, strict_mode)
+
+
+def sort_songs(songs: list[dict]) -> list[dict]:
+    """Order the canonical catalog by artist, then album, then track number,
+    matching the web app's default Songs-tab sort."""
+
+    def key(song):
+        artist = str(song.get("artist") or "").lower()
+        album = str(song.get("album") or "").lower()
+        try:
+            track = float(song.get("track"))
+        except (TypeError, ValueError):
+            track = 0.0
+        return (artist, album, track)
+
+    return sorted(songs, key=key)
 
 
 def log_run_summary(run_summary: dict, strict_mode: bool) -> None:
