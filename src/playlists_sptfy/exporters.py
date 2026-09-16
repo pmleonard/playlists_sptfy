@@ -38,7 +38,17 @@ def write_json_file(data, file):
 
 
 def write_songs_csv(songs: list[dict], output_path: Path) -> None:
-    fieldnames = ["link", "artist", "title", "released", "duration", "album", "track", "tags"]
+    fieldnames = [
+        "link",
+        "artist",
+        "title",
+        "released",
+        "duration",
+        "album",
+        "track",
+        "tags",
+        "ranking",
+    ]
 
     def _write(tmp_path: Path) -> None:
         with open(tmp_path, "w", newline="", encoding="utf-8") as file:

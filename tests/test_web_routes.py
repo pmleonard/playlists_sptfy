@@ -69,6 +69,61 @@ def test_songs_route_smoke(client, data_root):
     assert resp.get_json()[0]["title"] == "One"
 
 
+def test_songs_route_update_roundtrips_ranking(client, data_root):
+    _write(data_root, "song_lists/songs.json", [_song("l1", title="One")])
+    resp = client.get("/api/songs/")
+    song = resp.get_json()[0]
+    song["ranking"] = "4"
+
+    resp = client.put("/api/songs/0", json=song)
+    assert resp.status_code == 200
+
+    stored = _read(data_root, "song_lists/songs.json")
+    assert stored[0]["ranking"] == "4"
+
+
+def test_albums_route_returns_avg_ranking(client, data_root):
+    _write(
+        data_root,
+        "song_lists/songs.json",
+        [
+            _song("l1", title="One", track=1, ranking="3"),
+            _song("l2", title="Two", track=2, ranking="4"),
+            _song("l3", title="Three", track=3, ranking=""),
+        ],
+    )
+    resp = client.get("/api/albums/")
+    assert resp.status_code == 200
+    row = resp.get_json()[0]
+    assert row["avg_ranking"] == 3.5
+
+
+def test_albums_route_tracks_include_per_song_ranking(client, data_root):
+    _write(
+        data_root,
+        "song_lists/songs.json",
+        [
+            _song("l1", title="One", track=1, ranking="3"),
+            _song("l2", title="Two", track=2, ranking=""),
+        ],
+    )
+    resp = client.get("/api/albums/")
+    assert resp.status_code == 200
+    tracks = {t["title"]: t["ranking"] for t in resp.get_json()[0]["tracks"]}
+    assert tracks == {"One": "3", "Two": ""}
+
+
+def test_albums_route_avg_ranking_is_null_when_all_tracks_unrated(client, data_root):
+    _write(
+        data_root,
+        "song_lists/songs.json",
+        [_song("l1", title="One", ranking="")],
+    )
+    resp = client.get("/api/albums/")
+    assert resp.status_code == 200
+    assert resp.get_json()[0]["avg_ranking"] is None
+
+
 def test_tag_groups_returns_genre_and_era_lists(client, data_root):
     _write(data_root, "song_lists/songs.json", [])
     resp = client.get("/api/tag-groups/")

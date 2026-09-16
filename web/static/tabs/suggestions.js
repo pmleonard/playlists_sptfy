@@ -7,6 +7,7 @@ let eraTags = new Set();
 let selectedTag = null;
 let scored = [];
 let columnFilters = {};
+let activeRankings = new Set();
 let pageState = { page: 1, pageSize: getPageSize("suggestions") };
 
 export async function render(container) {
@@ -26,6 +27,7 @@ export async function render(container) {
   selectedTag = null;
   scored = [];
   columnFilters = {};
+  activeRankings = new Set();
   pageState = { page: 1, pageSize: getPageSize("suggestions") };
   drawShell(container);
   renderTable(container);
@@ -33,6 +35,7 @@ export async function render(container) {
 
 function drawShell(container) {
   const tagOptions = otherTagsByCount(allSongs, genreTags, eraTags);
+  const rankingOptions = ["5", "4", "3", "2", "1", "unrated"];
 
   container.innerHTML = `
     <div class="flex-row" style="gap:8px;align-items:center;margin-bottom:12px">
@@ -41,6 +44,9 @@ function drawShell(container) {
         <option value="" disabled ${selectedTag ? "" : "selected"}>— Select a tag —</option>
         ${tagOptions.map((t) => `<option value="${escHtml(t)}" ${t === selectedTag ? "selected" : ""}>${escHtml(t)}</option>`).join("")}
       </select>
+    </div>
+    <div id="ranking-filters">
+      <div class="tag-filters">${rankingOptions.map(rankingBtnHtml).join("")}</div>
     </div>
     <div class="status-bar" id="status"></div>
     <div id="pagination-bar"></div>
@@ -55,6 +61,7 @@ function drawShell(container) {
             <th>Duration</th>
             <th>Released</th>
             <th>Tags</th>
+            <th>Ranking</th>
             <th></th>
           </tr>
           <tr class="filter-row">
@@ -65,6 +72,7 @@ function drawShell(container) {
             <td><input data-col="duration" placeholder="filter…"></td>
             <td><input data-col="released" placeholder="filter…"></td>
             <td><input data-col="tags" placeholder="filter…"></td>
+            <td></td>
             <td></td>
           </tr>
         </thead>
@@ -88,6 +96,17 @@ function drawShell(container) {
     });
   });
 
+  container.querySelector("#ranking-filters").addEventListener("click", (e) => {
+    const btn = e.target.closest(".tag-btn");
+    if (!btn) return;
+    const ranking = btn.dataset.ranking;
+    if (activeRankings.has(ranking)) activeRankings.delete(ranking);
+    else activeRankings.add(ranking);
+    btn.classList.toggle("active", activeRankings.has(ranking));
+    pageState.page = 1;
+    renderTable(container);
+  });
+
   // Delegated handler on the table — survives tbody re-renders
   container.querySelector("#suggestions-table").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-action='add-tag']");
@@ -109,6 +128,10 @@ function renderTable(container) {
   }
 
   const filtered = scored.filter(({ song: s }) => {
+    if (activeRankings.size > 0) {
+      const key = s.ranking || "unrated";
+      if (!activeRankings.has(key)) return false;
+    }
     for (const [col, val] of Object.entries(columnFilters)) {
       if (!val) continue;
       if (!String(s[col] ?? "").toLowerCase().includes(val)) return false;
@@ -128,6 +151,7 @@ function renderTable(container) {
       <td>${fmtDuration(s.duration)}</td>
       <td>${fmtDate(s.released)}</td>
       <td title="${escHtml(s.tags || "")}">${escHtml(s.tags || "")}</td>
+      <td>${s.ranking ? escHtml(s.ranking) : "—"}</td>
       <td class="row-actions">
         ${s.link ? `<a class="btn btn-secondary btn-sm" href="${escHtml(s.link)}" target="_blank" rel="noopener">Open ↗</a>` : ""}
         <button class="btn btn-primary btn-sm" data-action="add-tag" data-link="${escHtml(s.link || "")}">Add Tag</button>
@@ -182,7 +206,15 @@ function computeSuggestions(songs, tag) {
     const byArtist = artistCounts.get(a) || 0;
     const byArtistAlbum = artistAlbumCounts.get(key) || 0;
     const byTotal = totalTagCount;
-    return { song: s, score: byArtist + byArtistAlbum + byTotal, byArtist, byArtistAlbum, byTotal };
+    const byRanking = parseInt(s.ranking, 10) || 0;
+    return {
+      song: s,
+      score: byArtist + byArtistAlbum + byTotal + byRanking,
+      byArtist,
+      byArtistAlbum,
+      byTotal,
+      byRanking,
+    };
   });
 
   withScores.sort((x, y) =>
@@ -216,6 +248,11 @@ function otherTagsByCount(songs, genreSet, eraSet) {
   return [...counts.keys()]
     .filter((t) => !genreSet.has(t) && !eraSet.has(t))
     .sort((a, b) => counts.get(b) - counts.get(a) || a.localeCompare(b));
+}
+
+function rankingBtnHtml(r) {
+  const label = r === "unrated" ? "Unrated" : `${r}★`;
+  return `<button class="tag-btn ${activeRankings.has(r) ? "active" : ""}" data-ranking="${r}">${label}</button>`;
 }
 
 function cssEscape(s) {

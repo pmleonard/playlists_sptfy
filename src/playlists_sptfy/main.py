@@ -55,7 +55,17 @@ REQUIRED_SONG_FIELDS = [
     "album",
     "track",
     "tags",
+    "ranking",
 ]
+METADATA_FIELDS = ["artist", "title", "released", "duration", "album", "track"]
+VALID_RANKINGS = {"1", "2", "3", "4", "5"}
+
+
+def normalize_ranking(value) -> str:
+    if not isinstance(value, str):
+        return ""
+    text = value.strip()
+    return text if text in VALID_RANKINGS else ""
 
 
 def load_settings() -> dict:
@@ -120,9 +130,10 @@ def main():
     songs = remove_duplicates(songs)
     deduped_song_count = len(songs)
     if metadata_enabled:
-        songs = process_songs(songs, max_ctr)
+        songs, enrichment_stats = process_songs(songs, max_ctr)
     else:
         logger.info("Metadata enrichment disabled; skipping process_songs.")
+        enrichment_stats = {"enriched_from_blank": 0, "backfilled_from_partial": 0}
 
     songs, invalid_song_count = validate_song_rows(songs, strict_mode=strict_mode)
     if invalid_song_count:
@@ -176,6 +187,8 @@ def main():
         "http_retry_jitter_seconds": int(_HTTP_CONFIG["retry_jitter_seconds"]),
         "metadata_enabled": metadata_enabled,
         "dry_run": dry_run,
+        "enriched_from_blank": enrichment_stats["enriched_from_blank"],
+        "backfilled_from_partial": enrichment_stats["backfilled_from_partial"],
         "tags_summary": build_tags_summary(songs),
     }
 
@@ -248,6 +261,8 @@ def log_run_summary(run_summary: dict, strict_mode: bool) -> None:
         "grouped",
         "duplicate_groups",
         "invalid",
+        "enriched_from_blank",
+        "backfilled_from_partial",
         "retries",
         "failed_urls",
         "http_errors",
@@ -334,9 +349,11 @@ def validate_song_rows(songs: list[dict], strict_mode: bool = False) -> tuple[li
 def open_json_file(file):
     with open(file, encoding="utf-8") as f:
         songs = json.load(f)
-    # Keep tags canonical at load-time so downstream filtering/merging is consistent.
+    # Keep tags/ranking canonical at load-time so downstream filtering/merging is consistent,
+    # and so legacy rows with no "ranking" key don't fail REQUIRED_SONG_FIELDS validation.
     for song in songs:
         song["tags"] = normalize_tags(song.get("tags", ""))
+        song["ranking"] = normalize_ranking(song.get("ranking", ""))
     return songs
 
 
@@ -358,6 +375,7 @@ def build_song_entry(link: str, tag: str) -> dict:
         "album": "",
         "track": "",
         "tags": normalize_tags(tag),
+        "ranking": "",
     }
 
 
@@ -460,24 +478,41 @@ def find_duplicates(songs, num_chars, ignore_duplicates_path: Path | None = None
 
 
 def process_songs(songs, max_ctr):
-    ctr = 0
     total = len(songs)
+    ctr = 0
+    stats = {"enriched_from_blank": 0, "backfilled_from_partial": 0}
+
     for i, song in enumerate(songs):
-        if song["artist"] == "" and ctr < max_ctr:
+        if ctr >= max_ctr:
+            break
+        if song["artist"] == "":
             songs[i] = extract_meta(song)
+            stats["enriched_from_blank"] += 1
             ctr += 1
+
+    for i, song in enumerate(songs):
+        if ctr >= max_ctr:
+            break
+        missing = [field for field in METADATA_FIELDS if not song.get(field)]
+        if missing and len(missing) < len(METADATA_FIELDS):
+            songs[i] = extract_meta_fill_missing(song, missing)
+            stats["backfilled_from_partial"] += 1
+            ctr += 1
+
+    for i, song in enumerate(songs):
         songs[i]["tags"] = normalize_tags(song.get("tags", ""))
+        songs[i]["ranking"] = normalize_ranking(song.get("ranking", ""))
         current = i + 1
         logger.debug("Processed song %d/%d", current, total)
         if current % PROGRESS_LOG_INTERVAL == 0 or current == total:
             logger.info("Processed %d/%d songs", current, total)
-    return songs
+
+    return songs, stats
 
 
-def extract_meta(song):
+def _scrape_meta_fields(url: str) -> dict:
+    fields = {"artist": "", "title": "", "released": "", "duration": "", "album": "", "track": ""}
     try:
-        url = song["link"]
-        song["tags"] = normalize_tags(song.get("tags", ""))
         meta = get_url_meta(url)
         meta_obj = {}
         for tag in meta:
@@ -491,14 +526,30 @@ def extract_meta(song):
                 meta_obj[tag.attrs["name"]] = tag.attrs["content"]
             if "property" in tag.attrs and tag.attrs["property"].strip().lower() in ["og:title"]:
                 meta_obj[tag.attrs["property"]] = tag.attrs["content"]
-        song["artist"] = meta_obj.get("music:musician_description", "")
-        song["title"] = clean_scraped_text(meta_obj.get("og:title", ""))
-        song["released"] = meta_obj.get("music:release_date", "")
-        song["duration"] = meta_obj.get("music:duration", "")
-        song["album"] = extract_album(meta_obj.get("music:album", ""))
-        song["track"] = meta_obj.get("music:album:track", "")
+        fields["artist"] = meta_obj.get("music:musician_description", "")
+        fields["title"] = clean_scraped_text(meta_obj.get("og:title", ""))
+        fields["released"] = meta_obj.get("music:release_date", "")
+        fields["duration"] = meta_obj.get("music:duration", "")
+        fields["album"] = extract_album(meta_obj.get("music:album", ""))
+        fields["track"] = meta_obj.get("music:album:track", "")
     except Exception:
-        logger.exception("Failed to extract metadata for song link: %s", song.get("link", ""))
+        logger.exception("Failed to extract metadata for song link: %s", url)
+    return fields
+
+
+def extract_meta(song):
+    song["tags"] = normalize_tags(song.get("tags", ""))
+    scraped = _scrape_meta_fields(song["link"])
+    song.update(scraped)
+    return song
+
+
+def extract_meta_fill_missing(song, missing):
+    song["tags"] = normalize_tags(song.get("tags", ""))
+    scraped = _scrape_meta_fields(song["link"])
+    for field in missing:
+        if scraped.get(field):
+            song[field] = scraped[field]
     return song
 
 

@@ -336,6 +336,13 @@ def _split_by_year_and_tracks(album_songs: list[dict]) -> list[list[dict]]:
     return [group["songs"] for group in groups]
 
 
+def _avg_ranking(songs_group: list[dict]) -> float | None:
+    values = [int(s["ranking"]) for s in songs_group if s.get("ranking")]
+    if not values:
+        return None
+    return round(sum(values) / len(values), 1)
+
+
 def _build_row(artist: str, album: str, songs_group: list[dict], is_various_artists: bool) -> dict:
     tracks = sorted(
         songs_group,
@@ -348,6 +355,7 @@ def _build_row(artist: str, album: str, songs_group: list[dict], is_various_arti
         "track_count": len(songs_group),
         "year_min": min(years) if years else None,
         "year_max": max(years) if years else None,
+        "avg_ranking": _avg_ranking(songs_group),
         "is_various_artists": is_various_artists,
         "tracks": [
             {
@@ -358,6 +366,7 @@ def _build_row(artist: str, album: str, songs_group: list[dict], is_various_arti
                 "released": s.get("released"),
                 "tags": s.get("tags", ""),
                 "link": s.get("link", ""),
+                "ranking": s.get("ranking", ""),
             }
             for s in tracks
         ],
