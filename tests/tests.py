@@ -43,6 +43,7 @@ def _song(link, artist, title, tags):
         "album": "",
         "track": 0,
         "tags": tags,
+        "ranking": "",
     }
 
 
@@ -71,6 +72,24 @@ def test_merge_tags_sorts_result() -> None:
 
 def test_normalize_tags_lowercases_and_deduplicates() -> None:
     assert normalize_tags("Rock, rock,  POP ,pop") == "pop, rock"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("1", "1"),
+        ("5", "5"),
+        (3, ""),
+        (None, ""),
+        ("", ""),
+        ("0", ""),
+        ("6", ""),
+        ("abc", ""),
+        ("3.0", ""),
+    ],
+)
+def test_normalize_ranking_accepts_only_1_to_5_strings(value, expected) -> None:
+    assert main_module.normalize_ranking(value) == expected
 
 
 def test_strip_spotify_suffix_removes_exact_suffix() -> None:
@@ -141,6 +160,87 @@ def test_extract_meta_cleans_scraped_title(monkeypatch) -> None:
     song = main_module.extract_meta({"link": "https://example.com/track", "tags": ""})
 
     assert song["title"] == "Paint It Black"
+
+
+def test_process_songs_pass2_backfills_only_missing_fields(monkeypatch) -> None:
+    scraped_tags = [
+        _FakeTag({"property": "og:title", "content": "Scraped Title | Spotify"}),
+        _FakeTag({"name": "music:musician_description", "content": "Scraped Artist"}),
+        _FakeTag({"name": "music:release_date", "content": "2020-01-01"}),
+        _FakeTag({"name": "music:duration", "content": "999"}),
+        _FakeTag({"name": "music:album", "content": ""}),
+        _FakeTag({"name": "music:album:track", "content": "9"}),
+    ]
+    monkeypatch.setattr(main_module, "get_url_meta", lambda _url: scraped_tags)
+
+    song = {
+        "link": "https://example.com/track",
+        "artist": "Real Artist",
+        "title": "Real Title",
+        "released": "",
+        "duration": "",
+        "album": "",
+        "track": "",
+        "tags": "",
+        "ranking": "",
+    }
+
+    songs, stats = main_module.process_songs([song], max_ctr=10)
+
+    assert stats == {"enriched_from_blank": 0, "backfilled_from_partial": 1}
+    result = songs[0]
+    # Already-populated fields are untouched even though the scrape returns different values.
+    assert result["artist"] == "Real Artist"
+    assert result["title"] == "Real Title"
+    # Blank fields are backfilled from the scrape.
+    assert result["released"] == "2020-01-01"
+    assert result["duration"] == "999"
+    assert result["track"] == "9"
+
+
+def test_process_songs_shares_max_ctr_budget_across_both_passes(monkeypatch) -> None:
+    scraped_tags = [
+        _FakeTag({"property": "og:title", "content": "Scraped Title"}),
+        _FakeTag({"name": "music:musician_description", "content": "Scraped Artist"}),
+        _FakeTag({"name": "music:release_date", "content": "2020-01-01"}),
+        _FakeTag({"name": "music:duration", "content": "999"}),
+        _FakeTag({"name": "music:album", "content": ""}),
+        _FakeTag({"name": "music:album:track", "content": "9"}),
+    ]
+    monkeypatch.setattr(main_module, "get_url_meta", lambda _url: scraped_tags)
+
+    def _blank_song(link):
+        return {
+            "link": link,
+            "artist": "",
+            "title": "",
+            "released": "",
+            "duration": "",
+            "album": "",
+            "track": "",
+            "tags": "",
+            "ranking": "",
+        }
+
+    def _partial_song(link):
+        return {
+            "link": link,
+            "artist": "Artist",
+            "title": "Title",
+            "released": "",
+            "duration": "",
+            "album": "",
+            "track": "",
+            "tags": "",
+            "ranking": "",
+        }
+
+    songs = [_blank_song("b1"), _blank_song("b2"), _partial_song("p1"), _partial_song("p2")]
+
+    _, stats = main_module.process_songs(songs, max_ctr=3)
+
+    assert stats["enriched_from_blank"] == 2
+    assert stats["backfilled_from_partial"] == 1
 
 
 def test_extract_album_cleans_scraped_album_title(monkeypatch) -> None:
@@ -362,7 +462,7 @@ def test_write_songs_csv_outputs_expected_columns(tmp_path: Path) -> None:
     write_songs_csv(songs, out)
 
     content = out.read_text(encoding="utf-8")
-    assert content.splitlines()[0] == "link,artist,title,released,duration,album,track,tags"
+    assert content.splitlines()[0] == "link,artist,title,released,duration,album,track,tags,ranking"
     assert "url1,Artist A,Title A,,0,,0,pop" in content
     assert "url2,Artist B,Title B,,0,,0,rock" in content
 
@@ -941,7 +1041,14 @@ def test_main_orchestration_uses_filtered_grouped_songs_for_playlist_export(monk
     # Use copy-per-song so main() mutations do not leak back into test fixtures.
     monkeypatch.setattr(main_module, "open_json_file", lambda _path: [dict(song) for song in songs])
     monkeypatch.setattr(main_module, "load_songs_from_tag_files", lambda _path: [])
-    monkeypatch.setattr(main_module, "process_songs", lambda in_songs, _max: in_songs)
+    monkeypatch.setattr(
+        main_module,
+        "process_songs",
+        lambda in_songs, _max: (
+            in_songs,
+            {"enriched_from_blank": 0, "backfilled_from_partial": 0},
+        ),
+    )
     monkeypatch.setattr(main_module, "load_grouped_songs", lambda _path: [["url-b", "url-a"]])
     monkeypatch.setattr(
         main_module,
@@ -1009,7 +1116,14 @@ def test_main_orchestration_skips_grouping_when_use_grouped_songs_is_false(monke
     # Use copy-per-song so main() mutations do not leak back into test fixtures.
     monkeypatch.setattr(main_module, "open_json_file", lambda _path: [dict(song) for song in songs])
     monkeypatch.setattr(main_module, "load_songs_from_tag_files", lambda _path: [])
-    monkeypatch.setattr(main_module, "process_songs", lambda in_songs, _max: in_songs)
+    monkeypatch.setattr(
+        main_module,
+        "process_songs",
+        lambda in_songs, _max: (
+            in_songs,
+            {"enriched_from_blank": 0, "backfilled_from_partial": 0},
+        ),
+    )
     # If grouping ran, this would reorder to [url-b, url-a] — it must not be applied.
     monkeypatch.setattr(main_module, "load_grouped_songs", lambda _path: [["url-b", "url-a"]])
     monkeypatch.setattr(
@@ -1524,9 +1638,9 @@ def test_main_golden_snapshot_tiny_fixture_outputs_exact_artifacts(
     duplicates_md = (song_lists_dir / "possible_duplicates.md").read_text(encoding="utf-8")
 
     assert songs_csv == (
-        "link,artist,title,released,duration,album,track,tags\n"
-        "url-a,Artist A,Same Song,,100,Album A,1,featured\n"
-        "url-b,Artist B,Same Song,,110,Album B,2,featured\n"
+        "link,artist,title,released,duration,album,track,tags,ranking\n"
+        "url-a,Artist A,Same Song,,100,Album A,1,featured,\n"
+        "url-b,Artist B,Same Song,,110,Album B,2,featured,\n"
     )
     assert playlist_txt == "url-b\nurl-a\n"
     assert duplicates_md == "\n".join(
@@ -1765,6 +1879,8 @@ def test_main_writes_run_summary_with_stable_schema(monkeypatch) -> None:
         "http_retry_jitter_seconds",
         "metadata_enabled",
         "dry_run",
+        "enriched_from_blank",
+        "backfilled_from_partial",
         "tags_summary",
     }
     for key in (

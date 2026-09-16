@@ -5,6 +5,7 @@ let allSongs = [];
 let genreTags = new Set();
 let eraTags = new Set();
 let activeTags = new Set();
+let activeRankings = new Set();
 let columnFilters = {};
 let sortCol = null;
 let sortDir = 1;
@@ -25,6 +26,7 @@ export async function render(container) {
     return;
   }
   activeTags = new Set();
+  activeRankings = new Set();
   columnFilters = {};
   sortCol = null;
   sortDir = 1;
@@ -42,10 +44,16 @@ function drawShell(container) {
   ];
   const row2 = other.map(tagBtnHtml);
 
+  const rankingOptions = ["5", "4", "3", "2", "1", "unrated"];
+  const rankingRow = rankingOptions.map(rankingBtnHtml).join("");
+
   container.innerHTML = `
     <div id="tag-filters">
       ${row1.length ? `<div class="tag-filters">${row1.join("")}</div>` : ""}
       ${row2.length ? `<div class="tag-filters">${row2.join("")}</div>` : ""}
+    </div>
+    <div id="ranking-filters">
+      <div class="tag-filters">${rankingRow}</div>
     </div>
     <div class="status-bar" id="status"></div>
     <div id="pagination-bar"></div>
@@ -60,6 +68,7 @@ function drawShell(container) {
             <th data-sort="duration">Duration</th>
             <th data-sort="released">Released</th>
             <th>Tags</th>
+            <th data-sort="ranking">Ranking</th>
             <th></th>
           </tr>
           <tr class="filter-row">
@@ -70,6 +79,7 @@ function drawShell(container) {
             <td><input data-col="duration" placeholder="filter…"></td>
             <td><input data-col="released" placeholder="filter…"></td>
             <td><input data-col="tags" placeholder="filter…"></td>
+            <td></td>
             <td></td>
           </tr>
         </thead>
@@ -84,6 +94,17 @@ function drawShell(container) {
     if (activeTags.has(tag)) activeTags.delete(tag);
     else activeTags.add(tag);
     btn.classList.toggle("active", activeTags.has(tag));
+    pageState.page = 1;
+    renderTable(container);
+  });
+
+  container.querySelector("#ranking-filters").addEventListener("click", (e) => {
+    const btn = e.target.closest(".tag-btn");
+    if (!btn) return;
+    const ranking = btn.dataset.ranking;
+    if (activeRankings.has(ranking)) activeRankings.delete(ranking);
+    else activeRankings.add(ranking);
+    btn.classList.toggle("active", activeRankings.has(ranking));
     pageState.page = 1;
     renderTable(container);
   });
@@ -124,6 +145,35 @@ function drawShell(container) {
     if (btn.dataset.action === "edit") openEditPanel(container, idx);
     if (btn.dataset.action === "delete") deleteSong(container, idx);
   });
+
+  container.querySelector("#songs-table").addEventListener("change", (e) => {
+    const select = e.target.closest(".ranking-select");
+    if (!select) return;
+    const idx = parseInt(select.dataset.idx, 10);
+    saveRanking(container, idx, select.value);
+  });
+}
+
+function rankingSelectHtml(ranking, i) {
+  const options = ["", "1", "2", "3", "4", "5"]
+    .map((v) => {
+      const label = v === "" ? "—" : v;
+      return `<option value="${v}" ${ranking === v || (!ranking && v === "") ? "selected" : ""}>${label}</option>`;
+    })
+    .join("");
+  return `<select class="ranking-select" data-idx="${i}">${options}</select>`;
+}
+
+async function saveRanking(container, idx, ranking) {
+  const updated = { ...allSongs[idx], ranking };
+  try {
+    await api("PUT", `/api/songs/${idx}`, updated);
+    allSongs[idx] = updated;
+    showToast("Ranking updated");
+    renderTable(container);
+  } catch (err) {
+    showToast(err.message, "error");
+  }
 }
 
 function renderTable(container) {
@@ -135,6 +185,10 @@ function renderTable(container) {
     if (activeTags.size > 0) {
       const songTags = (s.tags || "").split(",").map((t) => t.trim());
       if (!songTags.some((t) => activeTags.has(t))) return false;
+    }
+    if (activeRankings.size > 0) {
+      const key = s.ranking || "unrated";
+      if (!activeRankings.has(key)) return false;
     }
     for (const [col, val] of Object.entries(columnFilters)) {
       if (!val) continue;
@@ -169,6 +223,7 @@ function renderTable(container) {
       <td>${fmtDuration(s.duration)}</td>
       <td>${fmtDate(s.released)}</td>
       <td title="${escHtml(s.tags || "")}">${escHtml(s.tags || "")}</td>
+      <td>${rankingSelectHtml(s.ranking, i)}</td>
       <td class="row-actions">
         ${s.link ? `<a class="btn btn-secondary btn-sm" href="${escHtml(s.link)}" target="_blank" rel="noopener">Open ↗</a>` : ""}
         <button class="btn btn-secondary btn-sm" data-action="edit" data-idx="${i}">Edit</button>
@@ -211,6 +266,11 @@ function tagBtnHtml(t) {
   return `<button class="tag-btn ${activeTags.has(t) ? "active" : ""}" data-tag="${t}">${escHtml(t)}</button>`;
 }
 
+function rankingBtnHtml(r) {
+  const label = r === "unrated" ? "Unrated" : `${r}★`;
+  return `<button class="tag-btn ${activeRankings.has(r) ? "active" : ""}" data-ranking="${r}">${label}</button>`;
+}
+
 async function openEditPanel(container, idx) {
   container.querySelectorAll(".inline-edit-row").forEach((r) => r.remove());
 
@@ -247,7 +307,7 @@ async function openEditPanel(container, idx) {
   const panel = document.createElement("tr");
   panel.className = "inline-edit-row";
   panel.innerHTML = `
-    <td colspan="8">
+    <td colspan="9">
       <div class="inline-panel">
         <div class="card-header" style="margin-bottom:8px"><strong>Edit Song</strong></div>
         <div class="song-subform-grid">
@@ -259,6 +319,13 @@ async function openEditPanel(container, idx) {
           <div class="form-group"><label>Released</label><input class="f-released" type="text" value="${escHtml(song.released || "")}"></div>
           <div class="form-group"><label>Tags</label><input class="f-tags" type="text" value="${escHtml(song.tags || "")}"></div>
           <div class="form-group"><label>Link</label><input class="f-link" type="text" value="${escHtml(song.link || "")}"></div>
+          <div class="form-group">
+            <label>Ranking</label>
+            <select class="f-ranking">
+              <option value="" ${!song.ranking ? "selected" : ""}>Unrated</option>
+              ${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${song.ranking === String(n) ? "selected" : ""}>${n}</option>`).join("")}
+            </select>
+          </div>
         </div>
         <fieldset style="margin-top:12px;padding:8px;border:1px solid #ddd;border-radius:4px">
           <legend style="padding:0 4px">Add to Grouped Songs</legend>
@@ -331,6 +398,7 @@ function readPanelFields(panel) {
     released: panel.querySelector(".f-released").value.trim(),
     tags:     panel.querySelector(".f-tags").value.trim(),
     link:     panel.querySelector(".f-link").value.trim(),
+    ranking:  panel.querySelector(".f-ranking").value,
   };
 }
 

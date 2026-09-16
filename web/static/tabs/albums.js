@@ -2,22 +2,43 @@ import { api, showToast } from "/static/app.js";
 import { getPageSize, paginate, paginationBarHtml, bindPaginationBar } from "/static/pagination.js";
 
 let rows = [];
-let filters = { minTracks: "", artist: "", album: "" };
+let allSongs = [];
+let linkToIdx = new Map();
+let filters = { minTracks: "", minRanking: "", artist: "", album: "" };
 let openIndex = null;
 let pageState = { page: 1, pageSize: getPageSize("albums") };
 
 export async function render(container) {
   container.innerHTML = `<p class="loading">Loading…</p>`;
   try {
-    rows = await api("GET", "/api/albums/");
+    [rows, allSongs] = await Promise.all([
+      api("GET", "/api/albums/"),
+      api("GET", "/api/songs/"),
+    ]);
+    rebuildLinkIndex();
   } catch (err) {
     container.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
     return;
   }
-  filters = { minTracks: "", artist: "", album: "" };
+  filters = { minTracks: "", minRanking: "", artist: "", album: "" };
   openIndex = null;
   pageState = { page: 1, pageSize: getPageSize("albums") };
   draw(container);
+}
+
+function rebuildLinkIndex() {
+  linkToIdx = new Map();
+  allSongs.forEach((s, i) => {
+    if (s.link) linkToIdx.set(s.link, i);
+  });
+}
+
+async function refreshAlbums() {
+  [rows, allSongs] = await Promise.all([
+    api("GET", "/api/albums/"),
+    api("GET", "/api/songs/"),
+  ]);
+  rebuildLinkIndex();
 }
 
 function draw(container) {
@@ -46,6 +67,17 @@ function draw(container) {
             ${trackCounts.map((n) => `<option value="${n}">${n}</option>`).join("")}
           </select>
         </label>
+        <label class="flex-row" style="gap:6px">
+          User ranking (at least):
+          <select id="filter-min-ranking">
+            <option value="">All</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </label>
         <span id="filter-status" style="color:#888;margin-left:auto"></span>
       </div>
     </div>
@@ -55,9 +87,11 @@ function draw(container) {
   const artistInput = container.querySelector("#filter-artist");
   const albumInput = container.querySelector("#filter-album");
   const minTracksSelect = container.querySelector("#filter-min-tracks");
+  const minRankingSelect = container.querySelector("#filter-min-ranking");
   artistInput.value = filters.artist;
   albumInput.value = filters.album;
   minTracksSelect.value = filters.minTracks;
+  minRankingSelect.value = filters.minRanking;
 
   artistInput.addEventListener("input", () => {
     filters.artist = artistInput.value.toLowerCase();
@@ -77,6 +111,12 @@ function draw(container) {
     pageState.page = 1;
     renderList(container);
   });
+  minRankingSelect.addEventListener("change", () => {
+    filters.minRanking = minRankingSelect.value;
+    openIndex = null;
+    pageState.page = 1;
+    renderList(container);
+  });
 
   renderList(container);
 }
@@ -85,6 +125,7 @@ function renderList(container) {
   const filtered = rows
     .map((r, i) => ({ r, i }))
     .filter(({ r }) => filters.minTracks === "" || r.track_count >= parseInt(filters.minTracks, 10))
+    .filter(({ r }) => filters.minRanking === "" || (r.avg_ranking ?? -1) >= parseFloat(filters.minRanking))
     .filter(({ r }) => !filters.artist || r.artist.toLowerCase().includes(filters.artist))
     .filter(({ r }) => !filters.album || r.album.toLowerCase().includes(filters.album));
 
@@ -127,6 +168,10 @@ function renderList(container) {
   list.querySelectorAll("[data-action='confirm-create-group']").forEach((btn) => {
     btn.addEventListener("click", () => handleCreateGroup(btn));
   });
+
+  list.querySelectorAll(".ranking-select").forEach((select) => {
+    select.addEventListener("change", () => saveTrackRanking(container, select));
+  });
 }
 
 function rowHtml(r, i) {
@@ -136,12 +181,13 @@ function rowHtml(r, i) {
       ? r.year_min
       : `${r.year_min}–${r.year_max}`;
   const isOpen = openIndex === i;
+  const avgRanking = r.avg_ranking == null ? "—" : r.avg_ranking.toFixed(1);
 
   return `
     <div class="album-row" data-idx="${i}">
       <strong>${escHtml(r.artist)} — ${escHtml(r.album)}</strong>
       <div class="flex-row" style="gap:10px">
-        <span style="color:#888">${r.track_count} track${r.track_count === 1 ? "" : "s"} • ${years}</span>
+        <span style="color:#888">${r.track_count} track${r.track_count === 1 ? "" : "s"} • ${years} • ★ ${avgRanking}</span>
         <button class="btn btn-secondary btn-sm" data-action="view" data-idx="${i}">${isOpen ? "Hide" : "View"}</button>
       </div>
     </div>
@@ -154,7 +200,7 @@ function trackPanelHtml(r, i) {
       <div style="overflow-x:auto">
         <table>
           <thead>
-            <tr><th>Track</th><th>Artist</th><th>Title</th><th>Duration</th><th>Released</th><th>Tags</th></tr>
+            <tr><th>Track</th><th>Artist</th><th>Title</th><th>Duration</th><th>Released</th><th>Tags</th><th>Ranking</th></tr>
           </thead>
           <tbody>
             ${r.tracks
@@ -167,6 +213,7 @@ function trackPanelHtml(r, i) {
                 <td>${fmtDuration(t.duration)}</td>
                 <td>${fmtDate(t.released)}</td>
                 <td title="${escHtml(t.tags)}">${escHtml(t.tags)}</td>
+                <td>${rankingSelectHtml(t)}</td>
               </tr>`
               )
               .join("")}
@@ -187,6 +234,37 @@ function trackPanelHtml(r, i) {
         </div>
       </div>
     </div>`;
+}
+
+function rankingSelectHtml(t) {
+  if (!t.link) return `<span style="color:#888">—</span>`;
+  const ranking = t.ranking || "";
+  const options = ["", "1", "2", "3", "4", "5"]
+    .map((v) => {
+      const label = v === "" ? "—" : v;
+      return `<option value="${v}" ${ranking === v ? "selected" : ""}>${label}</option>`;
+    })
+    .join("");
+  return `<select class="ranking-select" data-link="${escHtml(t.link)}">${options}</select>`;
+}
+
+async function saveTrackRanking(container, select) {
+  const link = select.dataset.link;
+  const idx = linkToIdx.get(link);
+  if (idx == null) {
+    showToast("Could not find this song to update", "error");
+    return;
+  }
+  const updated = { ...allSongs[idx], ranking: select.value };
+  try {
+    await api("PUT", `/api/songs/${idx}`, updated);
+    allSongs[idx] = updated;
+    await refreshAlbums();
+    showToast("Ranking updated");
+    renderList(container);
+  } catch (err) {
+    showToast(err.message, "error");
+  }
 }
 
 async function handleCreateGroup(btn) {
