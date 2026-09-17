@@ -146,34 +146,10 @@ function drawShell(container) {
     if (btn.dataset.action === "delete") deleteSong(container, idx);
   });
 
-  container.querySelector("#songs-table").addEventListener("change", (e) => {
-    const select = e.target.closest(".ranking-select");
-    if (!select) return;
-    const idx = parseInt(select.dataset.idx, 10);
-    saveRanking(container, idx, select.value);
-  });
 }
 
-function rankingSelectHtml(ranking, i) {
-  const options = ["", "1", "2", "3", "4", "5"]
-    .map((v) => {
-      const label = v === "" ? "—" : v;
-      return `<option value="${v}" ${ranking === v || (!ranking && v === "") ? "selected" : ""}>${label}</option>`;
-    })
-    .join("");
-  return `<select class="ranking-select" data-idx="${i}">${options}</select>`;
-}
-
-async function saveRanking(container, idx, ranking) {
-  const updated = { ...allSongs[idx], ranking };
-  try {
-    await api("PUT", `/api/songs/${idx}`, updated);
-    allSongs[idx] = updated;
-    showToast("Ranking updated");
-    renderTable(container);
-  } catch (err) {
-    showToast(err.message, "error");
-  }
+function rankingDisplayHtml(ranking) {
+  return ranking ? `${ranking}★` : "—";
 }
 
 function renderTable(container) {
@@ -223,7 +199,7 @@ function renderTable(container) {
       <td>${fmtDuration(s.duration)}</td>
       <td>${fmtDate(s.released)}</td>
       <td title="${escHtml(s.tags || "")}">${escHtml(s.tags || "")}</td>
-      <td>${rankingSelectHtml(s.ranking, i)}</td>
+      <td>${rankingDisplayHtml(s.ranking)}</td>
       <td class="row-actions">
         ${s.link ? `<a class="btn btn-secondary btn-sm" href="${escHtml(s.link)}" target="_blank" rel="noopener">Open ↗</a>` : ""}
         <button class="btn btn-secondary btn-sm" data-action="edit" data-idx="${i}">Edit</button>
