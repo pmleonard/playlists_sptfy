@@ -1,6 +1,7 @@
 const tabModules = {
   songs: () => import("/static/tabs/songs.js"),
   albums: () => import("/static/tabs/albums.js"),
+  ranking: () => import("/static/tabs/ranking.js"),
   update: () => import("/static/tabs/update.js"),
   import: () => import("/static/tabs/import.js"),
   export: () => import("/static/tabs/export.js"),

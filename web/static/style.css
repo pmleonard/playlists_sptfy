@@ -145,6 +145,19 @@ button, .btn {
   border-color: #1db954;
 }
 
+/* Rank buttons (Ranking tab's per-row editor) */
+.rank-btns { display: flex; gap: 3px; }
+.rank-btn {
+  padding: 2px 7px;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+.rank-btn.active { background: #1db954; color: #fff; border-color: #1db954; }
+.rank-btn:disabled { background: #e0e0e0; color: #888; cursor: default; }
+
 /* Forms */
 .form-group {
   margin-bottom: 12px;
@@ -300,11 +313,12 @@ li.inline-item-panel .inline-panel {
 #toast-container {
   position: fixed;
   bottom: 20px;
-  right: 20px;
+  left: 20px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   z-index: 1000;
+  pointer-events: none;
 }
 
 .toast {
